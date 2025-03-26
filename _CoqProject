@@ -6,4 +6,5 @@
 -arg -w -arg -redundant-canonical-projection
 
 theories/prelude.v
+theories/positive_pairs.v
 theories/microcosm.v
