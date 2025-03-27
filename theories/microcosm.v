@@ -5,6 +5,57 @@ From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Export iprop own.
 Import uPred.
 
+
+(* Taken from gmap cmra construction;
+  this is needed for the stronger allocation of mcown compared to own *)
+Section freshness.
+  Local Set Default Proof Using "Type*".
+  Context `{!EqDecision K, !Countable K, !Infinite K} {A : cmra}.
+  Lemma alloc_updateP_strong_dep {N} (g : K → option K) (h : N → K → K) (S : list N)
+    (Q : gmap K A → Prop) (I : K → Prop) m (f : N → K → A) :
+    NoDup S →
+    pred_infinite I →
+    (∀ n1 n2 k, h n1 k = h n2 k → n1 = n2) →
+    (∀ n k, g (h n k) = Some k) →
+    (∀ i n, m !! (h n i) = None → I i → n ∈ S → ✓ (f n i)) →
+    (∀ i, (∀ n, n ∈ S → m !! (h n i) = None) → I i → Q (foldr (λ n m, <[h n i := f n i]>m) m S)) →
+    m ~~>: Q.
+  Proof.
+    move=> HND /(pred_infinite_set I (C:=gset K)) HP Hhinj Hgh ? HQ.
+    apply cmra_total_updateP. intros n mf Hm.
+    destruct (HP (set_omap g (dom (m ⋅ mf)))) as [i [Hi1 Hi2]].
+    assert (∀ n, n ∈ S → m !! (h n i) = None).
+    { intros n' Hn'. rewrite -not_elem_of_dom.
+      rewrite dom_op set_omap_union not_elem_of_union in Hi2.
+      destruct Hi2 as [Hi2 _]. intros ?; eapply Hi2, elem_of_set_omap_2; eauto. }
+    eexists; split; first by apply HQ.
+    match goal with
+      |- ✓{n} ?A => cut (dom A = list_to_set ((λ n, h n i) <$> S) ∪ dom (m ⋅ mf) ∧ ✓{n} A)
+    end; first tauto.
+    clear HQ.
+    induction S as [|n' S IHS]; simpl.
+    { split; last done. set_solver. }
+    destruct IHS as [IHS1 IHS2].
+    { by inversion HND. }
+    { set_solver. }
+    { set_solver. }
+    assert ((foldr (λ n' m', <[h n' i:=f n' i]> m') m S ⋅ mf) !! h n' i = None) as Hnin.
+    { apply not_elem_of_dom; rewrite IHS1.
+      apply not_elem_of_union; split.
+      - inversion HND; simplify_eq; set_solver.
+      - intros ?; apply Hi2. eapply elem_of_set_omap_2; first eassumption.
+        rewrite Hgh //. }
+    assert (foldr (λ n' m', <[h n' i:=f n' i]> m') m S !! h n' i = None).
+    { rewrite lookup_op in Hnin.
+      match type of Hnin with ?A ⋅ ?B = _ => destruct A; destruct B; done end. }
+    split.
+    - clear -IHS1; rewrite !dom_op dom_insert_L; rewrite !dom_op in IHS1; set_solver.
+    - rewrite insert_singleton_op //.
+      rewrite -assoc -insert_singleton_op; last done.
+      apply insert_validN; [apply cmra_valid_validN|]; [set_solver|auto].
+  Qed.
+End freshness.
+
 Definition mcname := positive.
 
 Definition push_mcname (μ : mcname) (γ : gname) : gname := inject_positive_pair μ γ.
@@ -754,6 +805,51 @@ Proof. rewrite !mcown_eq /mcown_def; apply _. Qed.
 Lemma later_mcown μ γ a : ▷ mcown μ γ a ⊢ ◇ ∃ b, mcown μ γ b ∧ ▷ (a ≡ b).
 Proof. rewrite mcown_eq /mcown_def; apply later_own. Qed.
 
+Lemma mcown_alloc_strong_dep
+  (f : mcname → gname → A) (M : gset mcname) (P : gname → Prop) :
+  pred_infinite P →
+  (∀ μ γ, μ ∈ M → P γ → ✓ (f μ γ)) →
+  ⊢ |==> ∃ γ, ⌜P γ⌝ ∗ [∗ set] μ ∈ M, mcown μ γ (f μ γ).
+Proof.
+  intros HPinf Hf.
+  set (w γ := foldr (λ μ (m : gmap gname A),
+    <[push_mcname μ γ := (f μ γ)]>m) ε (elements M)).
+  set (r γ := (λ x, own.inG_unfold (cmra_transport inG_prf x)) <$> w γ).
+  rewrite -(bupd_mono (∃ m, ⌜∃ γ, P γ ∧
+    m = discrete_fun_singleton (inG_id i) (r γ)⌝ ∧ uPred_ownM m)%I).
+  - rewrite /bi_emp_valid (ownM_unit emp).
+    apply bupd_ownM_updateP, (discrete_fun_singleton_updateP_empty _ (λ m, ∃ γ,
+      m = (λ x, own.inG_unfold (cmra_transport inG_prf x)) <$> w γ ∧ P γ));
+      last first.
+    { intros ? (?& -> &?); eexists; split; done. }
+    apply (alloc_updateP_strong_dep pop_mcname push_mcname (elements M)
+      _ P _ (λ μ γ, own.inG_unfold (cmra_transport inG_prf (f μ γ)))).
+    { apply NoDup_elements. }
+    { done. }
+    { intros ??? []%push_mcname_inj; done. }
+    { intros; apply pop_push_mcname. }
+    { intros;
+        by apply (cmra_morphism_valid own.inG_unfold), cmra_transport_valid, Hf;
+        [apply elem_of_elements|]. }
+    intros; eexists; split; last done.
+    rewrite /w; clear; induction (elements M) as [|μ L IHL];
+      simpl in *; first done.
+    rewrite fmap_insert IHL //.
+  - apply exist_elim=>m; apply pure_elim_l=>-[γ [Hfresh ->]].
+    rewrite !mcown_eq /mcown_def -(exist_intro γ) pure_True // left_id.
+    rewrite big_sepS_elements.
+    pose proof (NoDup_elements M) as HM.
+    rewrite /r /w; clear -HM;
+      induction (elements M) as [|μ L IHL]; simpl in *; first by auto.
+    rewrite fmap_insert insert_singleton_op.
+    + rewrite -discrete_fun_singleton_op ownM_op.
+      apply sep_mono; first by rewrite !own.own_eq /own.own_def.
+      apply IHL; by inversion HM.
+    + assert (μ ∉ L) as HμL by by inversion HM.
+      clear -HμL; induction L as [|ν L IHL]; simpl; first done.
+      rewrite lookup_fmap lookup_insert_ne -?lookup_fmap; first by apply IHL; set_solver.
+      intros []%push_mcname_inj; simplify_eq; set_solver.
+Qed.
 
 (** ** Allocation *)
 (* TODO: This also holds if we just have ✓ a at the current step-idx, as Iris
