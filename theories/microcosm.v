@@ -895,9 +895,60 @@ Lemma remove_mc_iResUR_op_inv {Σ} μ n (z x y : iResUR Σ) :
     x ≡{n}≡ remove_mc_iResUR μ x' ∧ y ≡{n}≡ remove_mc_iResUR μ y'.
 Proof.
   intros Heq.
-  exists (x ⋅ rename_mc_iResUR μ μ z), y.
-
-Admitted.
+  exists (x ⋅ rename_mc_iResUR μ μ z), y; split_and!.
+  - rewrite {1}(rename_mc_remove_mc_iResUR μ z) Heq.
+    rewrite assoc -(comm (⋅) x) //.
+  - rewrite remove_mc_iResUR_op.
+    rewrite remove_mc_rename_mc_iResUR_emp right_id.
+    intros i γ.
+    specialize (Heq i γ).
+    destruct (remove_mc_iResUR μ z i !! γ) eqn:Heqm;
+      rewrite Heqm in Heq.
+    + apply in_remove_keys_in_mc in Heqm as [].
+      rewrite discrete_fun_lookup_op lookup_op in Heq.
+      destruct (remove_mc_iResUR μ x i !! γ) eqn:Heqm'; rewrite Heqm'.
+      * apply in_remove_keys_in_mc in Heqm' as [? Heqm'].
+        rewrite Heqm'; done.
+      * apply not_in_remove_keys_in_mc in Heqm' as [|Heqm']; first done.
+        by rewrite Heqm'.
+    + apply not_in_remove_keys_in_mc in Heqm as [Heqm|Heqm].
+      * destruct (remove_mc_iResUR μ x i !! γ) eqn:Heqm'; rewrite Heqm'.
+        -- apply in_remove_keys_in_mc in Heqm' as [? Heqm'].
+          rewrite Heqm'; done.
+        -- rewrite discrete_fun_lookup_op lookup_op in Heq.
+           destruct (x i !! γ) eqn:Heqx; destruct (y i !! γ) eqn:Heqy;
+            rewrite ?Heqx ?Heqy in Heq; rewrite Heqx; by inversion Heq.
+      * rewrite discrete_fun_lookup_op lookup_op in Heq.
+        destruct (remove_mc_iResUR μ x i !! γ) eqn:Heqm'; rewrite Heqm'.
+        -- apply in_remove_keys_in_mc in Heqm' as [? Heqm'].
+           rewrite Heqm'; done.
+        -- destruct (x i !! γ) eqn:Heqx; destruct (y i !! γ) eqn:Heqy;
+            rewrite ?Heqx ?Heqy in Heq; rewrite Heqx; by inversion Heq.
+  - intros i γ.
+    specialize (Heq i γ).
+    destruct (remove_mc_iResUR μ z i !! γ) eqn:Heqm;
+      rewrite Heqm in Heq.
+    + apply in_remove_keys_in_mc in Heqm as [].
+      rewrite discrete_fun_lookup_op lookup_op in Heq.
+      destruct (remove_mc_iResUR μ y i !! γ) eqn:Heqm'; rewrite Heqm'.
+      * apply in_remove_keys_in_mc in Heqm' as [? Heqm'].
+        rewrite Heqm'; done.
+      * apply not_in_remove_keys_in_mc in Heqm' as [|Heqm']; first done.
+        by rewrite Heqm'.
+    + apply not_in_remove_keys_in_mc in Heqm as [Heqm|Heqm].
+      * destruct (remove_mc_iResUR μ y i !! γ) eqn:Heqm'; rewrite Heqm'.
+        -- apply in_remove_keys_in_mc in Heqm' as [? Heqm'].
+          rewrite Heqm'; done.
+        -- rewrite discrete_fun_lookup_op lookup_op in Heq.
+          destruct (x i !! γ) eqn:Heqx; destruct (y i !! γ) eqn:Heqy;
+            rewrite ?Heqx ?Heqy in Heq; rewrite Heqy; by inversion Heq.
+      * rewrite discrete_fun_lookup_op lookup_op in Heq.
+        destruct (remove_mc_iResUR μ y i !! γ) eqn:Heqm'; rewrite Heqm'.
+        -- apply in_remove_keys_in_mc in Heqm' as [? Heqm'].
+          rewrite Heqm'; done.
+        -- destruct (x i !! γ) eqn:Heqx; destruct (y i !! γ) eqn:Heqy;
+            rewrite ?Heqx ?Heqy in Heq; rewrite Heqy; by inversion Heq.
+Qed.
 
 Lemma rename_mc_iResUR_mono {Σ} μ μ' (x x' : iResUR Σ) :
   x ≼ x' → rename_mc_iResUR μ μ' x ≼ rename_mc_iResUR μ μ' x'.
@@ -1226,7 +1277,7 @@ Section new_microcosm.
     split; first set_solver.
     rewrite rename_mc_iResUR_comp.
     eapply uPred_holds_ne; eauto.
-    eapply rename_mc_iResUR_valid, cmra_validN_le; eauto.
+    eapply rename_mc_iResUR_validN, cmra_validN_le; eauto.
   Qed.
 End new_microcosm.
 
@@ -1336,15 +1387,51 @@ Section rename_remove_mcown.
       exists c; rewrite -Hbb'; done.
   Qed.
 
-  Lemma rename_mcown μ ν γ a :
-    rename_mc ν μ (mcown μ γ a) ⊣⊢ mcown ν γ a.
+  Lemma remove_mcown_1 μ γ a :
+    remove_mc μ (mcown μ γ a) ⊣⊢ False.
   Proof.
+    split; rewrite /remove_mc mcown_eq /mcown_def /= own.own_eq /own.own_def /=; unseal.
+    intros ? x; split; last done.
+    intros (?& Heq &?&?)%iRes_singleton_included.
+    destruct (remove_mc_iResUR μ x (inG_id i) !! push_mcname μ γ) eqn:Heqm;
+      last by inversion Heq.
+    apply in_remove_keys_in_mc in Heqm as [Heqm _].
+    apply Heqm; rewrite mcname_of_push_mcname //.
+  Qed.
 
+  Lemma remove_mcown_2 μ ν γ a :
+    μ ≠ ν → remove_mc μ (mcown ν γ a) ⊣⊢ mcown ν γ a.
+  Proof.
+    split; rewrite /remove_mc mcown_eq /mcown_def /= own.own_eq /own.own_def /=; unseal.
+    intros ? x; split.
+    - intros (?& Heq &?&?)%iRes_singleton_included.
+      rewrite iRes_singleton_included.
+      destruct (remove_mc_iResUR μ x (inG_id i) !! push_mcname ν γ) eqn:Heqm;
+        last by inversion Heq.
+        apply in_remove_keys_in_mc in Heqm as [Heqm1 Heqm2].
+        eexists; split; last by eauto. by rewrite Heqm2.
+    - intros (?& Heq &?&?)%iRes_singleton_included.
+      rewrite iRes_singleton_included.
+      destruct (x (inG_id i) !! push_mcname ν γ) eqn:Heqm;
+        last by inversion Heq.
+      apply Some_dist_inj in Heq.
+      destruct (remove_mc_iResUR μ x (inG_id i) !! push_mcname ν γ) eqn:Heqm'.
+      + apply in_remove_keys_in_mc in Heqm' as [? Heqm'].
+        rewrite Heqm in Heqm'; simplify_eq.
+        eexists; split; first done. by eexists; rewrite Heq.
+      + apply not_in_remove_keys_in_mc in Heqm' as [Heqm'|Heqm'].
+        { rewrite mcname_of_push_mcname in Heqm'; simplify_eq. }
+        rewrite Heqm in Heqm'; done.
+  Qed.
+  
 End rename_remove_mcown.
 
-Lemma mcown_inside μ ν γ a :
-    rename_mc ν μ (mcown μ γ a) ⊣⊢ mcown ν γ a.
-  Proof.
+Global Instance mcown_inside μ γ a : InsideMC μ (mcown μ γ a).
+Proof. rewrite /InsideMC rename_mcown //. Qed.
+
+Global Instance mcown_outside μ ν γ a : μ ≠ ν → OutsideMC μ (mcown ν γ a).
+Proof. intros; rewrite /OutsideMC remove_mcown_2 //. Qed.
+
 
 Lemma mcown_op μ γ a1 a2 : mcown μ γ (a1 ⋅ a2) ⊣⊢ mcown μ γ a1 ∗ mcown μ γ a2.
 Proof. by rewrite !mcown_eq /mcown_def own_op. Qed.
