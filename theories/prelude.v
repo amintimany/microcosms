@@ -1,5 +1,5 @@
 From stdpp Require Export options prelude numbers.
-From Coq.ssr Require Export ssreflect.
+From Stdlib.ssr Require Export ssreflect.
 
 (* Some helper lemmas; consider up-streaming some of them. *)
 

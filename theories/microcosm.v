@@ -5,7 +5,6 @@ From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Export iprop own.
 Import uPred.
 
-
 (* Taken from gmap cmra construction;
   this is needed for the stronger allocation of mcown compared to own *)
 Section freshness.
@@ -170,6 +169,14 @@ Lemma mcrename_same μ γ δ : mcrename μ μ δ = Some γ → γ = δ.
 Proof.
   intros (?&?&?&?)%mcrename_spec; simplify_eq.
   eapply push_pop_mcname_ext; eauto using pop_push_mcname, mcname_of_push_mcname.
+Qed.
+
+Lemma mcrename_None μ μ' γ : mcrename μ μ' γ = None → mcname_of γ ≠ Some μ.
+Proof.
+  intros Hmcr Hmco.
+  pose proof Hmco as [δ ?]%mcname_of_is_Some_pop.
+  erewrite <- (push_pop_mcname γ) in Hmcr; eauto.
+  rewrite mcrename_of_push in Hmcr; done.
 Qed.
 
 Lemma mcrename_has_mcname μ ν γ δ :
@@ -460,28 +467,118 @@ Proof.
     symmetry; apply in_mcrename_keys; eauto.
 Qed.
 
-Lemma mcrename_keys_subset {A} μ (g : gmap gname A) : mcrename_keys μ μ g ⊆ g.
+Lemma remove_keys_in_mc_idemp {A} μ (g : gmap gname A) :
+remove_keys_in_mc μ (remove_keys_in_mc μ g) = remove_keys_in_mc μ g.
 Proof.
-  intros γ.
-  destruct (mcrename_keys μ μ g !! γ) as [a|] eqn:Ha; simpl; last by case_match.
-  apply in_mcrename_keys in Ha as (δ & ?%mcrename_same & Hδ); simplify_eq.
-  rewrite Hδ //.
+  apply map_eq; intros γ.
+  destruct (remove_keys_in_mc μ (remove_keys_in_mc μ g) !! γ) as [a|] eqn:Hlu; last first.
+  - apply not_in_remove_keys_in_mc in Hlu as [|Hlu].
+    { symmetry; apply not_in_remove_keys_in_mc; by left. }
+    apply not_in_remove_keys_in_mc in Hlu as [|Hlu].
+    { symmetry; apply not_in_remove_keys_in_mc; by left. }
+    symmetry; apply not_in_remove_keys_in_mc; by right.
+  - apply in_remove_keys_in_mc in Hlu as (? & <-); done.
 Qed.
 
-Definition mcrename_iResUR {Σ} μ μ' (x : iResUR Σ) : iResUR Σ :=
+Lemma remove_keys_in_mc_mcrename_keys_empty {A} μ ν (g : gmap gname A) :
+  remove_keys_in_mc ν (mcrename_keys μ ν g) = ∅.
+Proof.
+  apply map_eq; intros γ; rewrite lookup_empty.
+  apply not_in_remove_keys_in_mc.
+  destruct (decide (mcname_of γ = Some ν)); first by left.
+  right.
+  apply not_in_mcrename_keys; intros δ.
+  left; intros ?%mcrename_has_mcname'; done.
+Qed.
+
+Lemma remove_keys_in_mc_mcrename_keys_id {A} μ ν ρ (g : gmap gname A) :
+  ρ ≠ ν → remove_keys_in_mc ρ (mcrename_keys μ ν g) = (mcrename_keys μ ν g).
+Proof.
+  intros Hneq; apply map_eq; intros γ.
+  destruct (mcrename_keys μ ν g !! γ) eqn:Heqm.
+  - apply in_mcrename_keys in Heqm as (?& Hmcr &?).
+    pose proof Hmcr as ?%mcrename_has_mcname'.
+    apply in_remove_keys_in_mc; split; first by intros ?; simplify_eq.
+    apply in_mcrename_keys; eauto.
+  - apply not_in_remove_keys_in_mc.
+    destruct (decide (mcname_of γ = Some ρ)); [by left|by right].
+Qed.
+
+Lemma mcrename_keys_remove_keys_in_mc_empty {A} μ ν (g : gmap gname A) :
+  mcrename_keys μ ν (remove_keys_in_mc μ g) = ∅.
+Proof.
+  apply map_eq; intros γ; rewrite lookup_empty.
+  apply not_in_mcrename_keys; intros δ.
+  destruct (decide (mcrename μ ν δ = Some γ)) as [?%mcrename_has_mcname|];
+    last by left.
+  right.
+  apply not_in_remove_keys_in_mc; by left.
+Qed.
+
+Lemma mcrename_keys_remove_keys_in_mc_id {A} μ ν ρ (g : gmap gname A) :
+  ρ ≠ μ → mcrename_keys μ ν (remove_keys_in_mc ρ g) = mcrename_keys μ ν g.
+Proof.
+  intros Hneq; apply map_eq; intros γ.
+  destruct (mcrename_keys μ ν g !! γ) eqn:Heqm.
+  - apply in_mcrename_keys in Heqm as (δ & Hmcr &?).
+    pose proof Hmcr as ?%mcrename_has_mcname.
+    apply in_mcrename_keys.
+    eexists; split; first done.
+    apply in_remove_keys_in_mc; split; last done.
+    by intros ?; simplify_eq.
+  - apply not_in_mcrename_keys; intros δ.
+    destruct (decide (mcrename μ ν δ = Some γ)); last by left.
+    right.
+    rewrite not_in_mcrename_keys in Heqm; destruct (Heqm δ); first done.
+    apply not_in_remove_keys_in_mc; auto.
+Qed.
+
+Definition rename_mc_iResUR {Σ} μ μ' (x : iResUR Σ) : iResUR Σ :=
   λ i, mcrename_keys μ μ' (x i).
 
 Definition remove_mc_iResUR {Σ} μ (x : iResUR Σ) : iResUR Σ :=
   λ i, remove_keys_in_mc μ (x i).
 
-Lemma mcrename_iResUR_comp {Σ} μ ν ρ (x : iResUR Σ) :
-  mcrename_iResUR ν ρ (mcrename_iResUR μ ν x) ≡ mcrename_iResUR μ ρ x.
-Proof. intros i; rewrite /mcrename_iResUR mcrename_keys_comp //. Qed.
+Lemma rename_mc_iResUR_comp {Σ} μ ν ρ (x : iResUR Σ) :
+  rename_mc_iResUR ν ρ (rename_mc_iResUR μ ν x) ≡ rename_mc_iResUR μ ρ x.
+Proof. intros i; rewrite /rename_mc_iResUR mcrename_keys_comp //. Qed.
 
-Lemma mcrename_remove_mc_iResUR {Σ} μ (x : iResUR Σ) :
-  x ≡ mcrename_iResUR μ μ x ⋅ remove_mc_iResUR μ x.
+Lemma remove_mc_iResUR_idemp {Σ} μ (x : iResUR Σ) :
+  remove_mc_iResUR μ (remove_mc_iResUR μ x) ≡ remove_mc_iResUR μ x.
+Proof. intros i; rewrite /remove_mc_iResUR remove_keys_in_mc_idemp //. Qed.
+
+Lemma remove_mc_rename_mc_iResUR_emp {Σ} μ ν (x : iResUR Σ) :
+  remove_mc_iResUR ν (rename_mc_iResUR μ ν x) ≡ ε.
 Proof.
-  rewrite /mcrename_iResUR /remove_mc_iResUR.
+  intros i; rewrite /remove_mc_iResUR /rename_mc_iResUR
+    remove_keys_in_mc_mcrename_keys_empty //.
+Qed.
+
+Lemma remove_mc_rename_mc_iResUR_id {Σ} μ ν ρ (x : iResUR Σ) :
+  ρ ≠ ν → remove_mc_iResUR ρ (rename_mc_iResUR μ ν x) ≡ (rename_mc_iResUR μ ν x).
+Proof.
+  intros ? i; rewrite /remove_mc_iResUR /rename_mc_iResUR
+    remove_keys_in_mc_mcrename_keys_id //.
+Qed.
+
+Lemma rename_mc_remove_mc_iResUR_empty {Σ} μ ν (x : iResUR Σ) :
+  rename_mc_iResUR μ ν (remove_mc_iResUR μ x) ≡ ε.
+Proof.
+  intros i; rewrite /remove_mc_iResUR /rename_mc_iResUR
+    mcrename_keys_remove_keys_in_mc_empty //.
+Qed.
+
+Lemma rename_mc_remove_mc_iResUR_id {Σ} μ ν ρ (x : iResUR Σ) :
+  ρ ≠ μ → rename_mc_iResUR μ ν (remove_mc_iResUR ρ x) ≡ rename_mc_iResUR μ ν x.
+Proof.
+  intros ? i; rewrite /remove_mc_iResUR /rename_mc_iResUR
+    mcrename_keys_remove_keys_in_mc_id //.
+Qed.
+
+Lemma rename_mc_remove_mc_iResUR {Σ} μ (x : iResUR Σ) :
+  x ≡ rename_mc_iResUR μ μ x ⋅ remove_mc_iResUR μ x.
+Proof.
+  rewrite /rename_mc_iResUR /remove_mc_iResUR.
   intros i γ.
   rewrite !discrete_fun_lookup_op !lookup_op.
   destruct (decide (mcname_of γ = Some μ)) as [Heq|Hneq].
@@ -516,17 +613,62 @@ Proof.
       rewrite Hrm; done.
 Qed.
 
-Lemma mcrename_iResUR_included {Σ} μ (x : iResUR Σ) :
-  mcrename_iResUR μ μ x ≼ x.
-Proof. eexists; apply mcrename_remove_mc_iResUR. Qed.
+Lemma rename_mc_iResUR_included {Σ} μ (x : iResUR Σ) : rename_mc_iResUR μ μ x ≼ x.
+Proof. eexists; apply rename_mc_remove_mc_iResUR. Qed.
+Lemma rename_mc_iResUR_includedN {Σ} μ (x : iResUR Σ) n : rename_mc_iResUR μ μ x ≼{n} x.
+Proof. apply cmra_included_includedN, rename_mc_iResUR_included. Qed.
 
-Lemma remove_mc_iResUR_included {Σ} μ (x : iResUR Σ) :
-  remove_mc_iResUR μ x ≼ x.
-Proof. eexists; rewrite comm; apply mcrename_remove_mc_iResUR. Qed.
+Lemma remove_mc_iResUR_included {Σ} μ (x : iResUR Σ) : remove_mc_iResUR μ x ≼ x.
+Proof. eexists; rewrite comm; apply rename_mc_remove_mc_iResUR. Qed.
+Lemma remove_mc_iResUR_includedN {Σ} μ (x : iResUR Σ) n : remove_mc_iResUR μ x ≼{n} x.
+Proof. apply cmra_included_includedN, remove_mc_iResUR_included. Qed.
 
-Local Instance mcrename_ne {Σ} n μ μ' : Proper ((dist n) ==> (dist n)) (@mcrename_iResUR Σ μ μ').
+Lemma rename_mc_iResUR_core {Σ} μ ν (x : iResUR Σ) :
+  core (rename_mc_iResUR μ ν x) ≡ rename_mc_iResUR μ ν (core x).
 Proof.
-  intros x y Heq i γ.
+  intros i γ; rewrite /rename_mc_iResUR !discrete_fun_lookup_core lookup_core.
+  destruct (mcrename_keys μ ν (core (x i)) !! γ) eqn:Heqm; rewrite Heqm.
+  - apply in_mcrename_keys in Heqm as (δ & Hδr & Hδlu).
+    destruct (mcrename_keys μ ν (x i) !! γ) eqn:Heqm'.
+    + apply in_mcrename_keys in Heqm' as (ξ & Hξr & Hξlu).
+      assert (δ = ξ); subst.
+      { eapply mcrename_inj; eauto. }
+      rewrite lookup_core Hξlu in Hδlu.
+      rewrite Hδlu //.
+    + rewrite not_in_mcrename_keys in Heqm'.
+      specialize (Heqm' δ) as [|Heqm']; first done.
+      rewrite lookup_core Heqm' in Hδlu; done.
+  - destruct (mcrename_keys μ ν (x i) !! γ) eqn:Heqm'; last done.
+    apply in_mcrename_keys in Heqm' as (ξ & Hξr & Hξlu).
+    rewrite not_in_mcrename_keys in Heqm.
+    specialize (Heqm ξ) as [|Heqm]; first done.
+    rewrite lookup_core Hξlu in Heqm; rewrite Heqm //.
+Qed.
+
+Lemma remove_mc_iResUR_core {Σ} μ (x : iResUR Σ) :
+  core (remove_mc_iResUR μ x) ≡ remove_mc_iResUR μ (core x).
+Proof.
+  intros i γ; rewrite /remove_mc_iResUR !discrete_fun_lookup_core lookup_core.
+  destruct (remove_keys_in_mc μ (core (x i)) !! γ) eqn:Heqm; rewrite Heqm.
+  - apply in_remove_keys_in_mc in Heqm as [? Hlu].
+    destruct (remove_keys_in_mc μ (x i) !! γ) eqn:Heqm'.
+    + apply in_remove_keys_in_mc in Heqm' as [? Hlu'].
+      rewrite lookup_core Hlu' in Hlu.
+      rewrite Hlu //.
+    + rewrite lookup_core in Hlu.
+      rewrite not_in_remove_keys_in_mc in Heqm'.
+      destruct Heqm' as [|Heqm]; first done.
+      rewrite Heqm in Hlu; rewrite Hlu //.
+  - destruct (remove_keys_in_mc μ (x i) !! γ) eqn:Heqm'; last done.
+    apply in_remove_keys_in_mc in Heqm' as [? Heqm'].
+    rewrite not_in_remove_keys_in_mc in Heqm.
+    destruct Heqm as [|Heqm]; first done.
+    rewrite lookup_core Heqm' in Heqm; rewrite Heqm //.
+Qed.
+    
+Global Instance mcrename_ne {Σ} μ μ' : NonExpansive (@rename_mc_iResUR Σ μ μ').
+Proof.
+  intros n x y Heq i γ.
   destruct (mcrename_keys μ μ' (x i) !! γ) as [m|] eqn:Heqm;
     destruct (mcrename_keys μ μ' (y i) !! γ) as [m'|] eqn:Heqm';
     rewrite Heqm Heqm' /=; last done.
@@ -546,14 +688,36 @@ Proof.
     rewrite Heqm Hδ' in Heq; done.
 Qed.
 
-Lemma mcrename_iResUR_mul {Σ} μ μ' (x x' : iResUR Σ) :
-  mcrename_iResUR μ μ' (x ⋅ x') ≡ mcrename_iResUR μ μ' x ⋅ mcrename_iResUR μ μ' x'.
+Global Instance mcrename_proper {Σ} μ μ' : Proper ((≡) ==> (≡)) (@rename_mc_iResUR Σ μ μ').
+Proof. apply ne_proper; apply _. Qed.
+
+Global Instance remove_mc_ne {Σ} μ : NonExpansive (@remove_mc_iResUR Σ μ).
 Proof.
-  intros i γ; rewrite /mcrename_iResUR.
+  intros n x y Heq i γ.
+  destruct (remove_keys_in_mc μ (x i) !! γ) as [m|] eqn:Heqm;
+    destruct (remove_keys_in_mc μ (y i) !! γ) as [m'|] eqn:Heqm';
+    rewrite Heqm Heqm' /=; last done.
+  - apply in_remove_keys_in_mc in Heqm as (? & <-).
+    apply in_remove_keys_in_mc in Heqm' as (? & <-).
+    apply Heq.
+  - apply in_remove_keys_in_mc in Heqm as (? & <-).
+    apply not_in_remove_keys_in_mc in Heqm' as [| <-]; first done.
+    apply Heq.
+  - apply in_remove_keys_in_mc in Heqm' as (? & <-).
+    apply not_in_remove_keys_in_mc in Heqm as [| <-]; first done.
+    apply Heq.
+Qed.
+
+Global Instance mcremove_proper {Σ} μ : Proper ((≡) ==> (≡)) (@remove_mc_iResUR Σ μ).
+Proof. apply ne_proper; apply _. Qed.
+
+Lemma rename_mc_iResUR_op {Σ} μ μ' (x x' : iResUR Σ) :
+  rename_mc_iResUR μ μ' (x ⋅ x') ≡ rename_mc_iResUR μ μ' x ⋅ rename_mc_iResUR μ μ' x'.
+Proof.
+  intros i γ; rewrite /rename_mc_iResUR.
   rewrite !discrete_fun_lookup_op !lookup_op.
   destruct (mcrename_keys μ μ' (x i) !! γ) as [m|] eqn:Heqm;
-    destruct (mcrename_keys μ μ' (x' i) !! γ) as [m'|] eqn:Heqm';
-    rewrite Heqm Heqm' /=.
+    destruct (mcrename_keys μ μ' (x' i) !! γ) as [m'|] eqn:Heqm'.
   - apply in_mcrename_keys in Heqm as (δ & ? & Hδ).
     apply in_mcrename_keys in Heqm' as (δ' & ? & Hδ').
     assert (δ = δ'); subst.
@@ -561,6 +725,7 @@ Proof.
     destruct (mcrename_keys μ μ' (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw; last first.
     { eapply not_in_mcrename_keys' in Heqw; last by eauto.
       rewrite lookup_op Hδ Hδ' in Heqw; done. }
+    rewrite Heqw.
     apply in_mcrename_keys in Heqw as (ξ & ? & Hξ).
     assert (ξ = δ'); subst.
     { eapply mcrename_inj; eauto. }
@@ -571,6 +736,7 @@ Proof.
     destruct (mcrename_keys μ μ' (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw; last first.
     { eapply not_in_mcrename_keys' in Heqw; last by eauto.
       rewrite lookup_op Hδ Heqm' in Heqw; done. }
+    rewrite Heqw.
     apply in_mcrename_keys in Heqw as (ξ & ? & Hξ).
     assert (ξ = δ); subst.
     { eapply mcrename_inj; eauto. }
@@ -581,39 +747,188 @@ Proof.
     destruct (mcrename_keys μ μ' (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw; last first.
     { eapply not_in_mcrename_keys' in Heqw; last by eauto.
       rewrite lookup_op Hδ' Heqm in Heqw; done. }
+    rewrite Heqw.
     apply in_mcrename_keys in Heqw as (ξ & ? & Hξ).
     assert (ξ = δ'); subst.
     { eapply mcrename_inj; eauto. }
     rewrite lookup_op Hδ' Heqm left_id in Hξ; simplify_eq/=.
     rewrite left_id //.
   - rewrite left_id.
-    destruct (mcrename_keys μ μ' (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw; last done.
+    destruct (mcrename_keys μ μ' (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw;
+      rewrite Heqw; last done.
     apply in_mcrename_keys in Heqw as (ξ & ? & Hξ).
     eapply not_in_mcrename_keys' in Heqm; last done.
     eapply not_in_mcrename_keys' in Heqm'; last done.
     rewrite lookup_op Heqm Heqm' in Hξ; done.
 Qed.
 
-Lemma mcrename_iResUR_mono {Σ} μ μ' n (x x' : iResUR Σ) :
-  x ≼{n} x' → mcrename_iResUR μ μ' x ≼{n} mcrename_iResUR μ μ' x'.
+Lemma rename_mc_iResUR_op_inv {Σ} μ μ' n (z x y : iResUR Σ) :
+  rename_mc_iResUR μ μ' z ≡{n}≡ x ⋅ y →
+  ∃ x' y' : iResUR Σ,
+    z ≡{n}≡ x' ⋅ y' ∧
+    x ≡{n}≡ rename_mc_iResUR μ μ' x' ∧ y ≡{n}≡ rename_mc_iResUR μ μ' y'.
 Proof.
-  intros [z Hincl].
-  exists (mcrename_iResUR μ μ' z).
-  rewrite -mcrename_iResUR_mul Hincl //.
+  intros Heq; rewrite /rename_mc_iResUR.
+  exists (rename_mc_iResUR μ' μ x ⋅ remove_mc_iResUR μ z),
+    (rename_mc_iResUR μ' μ y); split_and!.
+  - rewrite {1}(rename_mc_remove_mc_iResUR μ z).
+    rewrite -(rename_mc_iResUR_comp μ μ' μ z) Heq.
+    rewrite rename_mc_iResUR_op.
+    rewrite -assoc -(comm (⋅) _ (rename_mc_iResUR μ' μ y)) assoc //.
+  - intros i γ; rewrite discrete_fun_lookup_op /rename_mc_iResUR.
+    destruct (mcrename_keys μ μ'
+      (mcrename_keys μ' μ (x i) ⋅ remove_mc_iResUR μ z i) !! γ) eqn:Heqm;
+      rewrite Heqm.
+    + apply in_mcrename_keys in Heqm as (δ & Hδr & Heqm).
+      pose proof Hδr as ?%mcrename_has_mcname.
+      rewrite lookup_op in Heqm. 
+      destruct (remove_mc_iResUR μ z i !! δ) eqn:Heqm'.
+      { apply in_remove_keys_in_mc in Heqm' as []; done. }
+      rewrite Heqm' right_id in Heqm.
+      apply in_mcrename_keys in Heqm as (ξ &?& Hlu).
+      assert (ξ = γ); subst; last by rewrite Hlu.
+      eapply mcrename_inj; first eassumption.
+      by apply mcrename_inv.
+    + destruct (mcrename μ' μ γ) as [δ|] eqn:Hδ.
+      * rewrite not_in_mcrename_keys in Heqm.
+        specialize (Heqm δ) as [Heqm|Heqm].
+        { exfalso; apply Heqm. by apply mcrename_inv. }
+        pose proof Hδ as ?%mcrename_has_mcname'.
+        rewrite lookup_op in Heqm.
+        destruct (remove_mc_iResUR μ z i !! δ) eqn:Heqm'.
+        { apply in_remove_keys_in_mc in Heqm' as []; done. }
+        rewrite Heqm' right_id in Heqm.
+        rewrite not_in_mcrename_keys in Heqm.
+        specialize (Heqm γ) as [| <-]; done.
+      * clear Heqm.
+        specialize (Heq i γ).
+        destruct (rename_mc_iResUR μ μ' z i !! γ) eqn:Heqm.
+        { apply in_mcrename_keys in Heqm as (ξ & ?%mcrename_inv &?);
+            simplify_eq. }
+        rewrite Heqm lookup_op in Heq.
+        destruct (x i !! γ) eqn:Heqx; destruct (y i !! γ) eqn:Heqy;
+          rewrite ?Heqx ?Heqy ?left_id ?right_id in Heq;
+          rewrite ?Heqx; by inversion Heq.
+  - intros i γ.
+    specialize (Heq i γ).
+    destruct (rename_mc_iResUR μ μ' z i !! γ) eqn:Heqm; last first.
+    + rewrite Heqm lookup_op in Heq.
+      destruct (x i !! γ) eqn:Heqx; destruct (y i !! γ) eqn:Heqy;
+        rewrite ?Heqx ?Heqy ?left_id ?right_id in Heq;
+        rewrite ?Heqy; try (by inversion Heq); [].
+      destruct (mcrename_keys μ μ' (rename_mc_iResUR μ' μ y i) !! γ) eqn:Heqm';
+        rewrite Heqm'; last done.
+      apply in_mcrename_keys in Heqm' as (δ &?& Hlu).
+      rewrite not_in_mcrename_keys in Heqm.
+      specialize (Heqm δ) as [|]; first done.
+      apply in_mcrename_keys in Hlu as (ξ & Hξ & Hlu).
+      pose proof Hξ as ?%mcrename_inv; simplify_eq/=.
+      rewrite Heqy in Hlu; done.
+    + rewrite Heqm in Heq.
+      apply in_mcrename_keys in Heqm as (δ &?& Hlu).
+      destruct (mcrename_keys μ μ' (rename_mc_iResUR μ' μ y i) !! γ) eqn:Heqm';
+        rewrite Heqm'.
+      * apply in_mcrename_keys in Heqm' as (ξ &?& Hlu').
+        apply in_mcrename_keys in Hlu' as (ξ' & Hξ' & Hlu'').
+        assert (δ = ξ); subst.
+        { eapply mcrename_inj; eauto. }
+        pose proof Hξ' as ?%mcrename_inv; simplify_eq/=.
+        rewrite Hlu''; done.
+      * rewrite not_in_mcrename_keys in Heqm'.
+        specialize (Heqm' δ) as [?|Heqm']; first done.
+        rewrite not_in_mcrename_keys in Heqm'.
+        specialize (Heqm' γ) as [Heqm'|Heqm'].
+        { by exfalso; apply Heqm', mcrename_inv. }
+        rewrite Heqm'; done.
 Qed.
 
-Program Definition rename_mc {Σ} μ μ' (P : iProp Σ) : iProp Σ :=
-  UPred _ (λ n x, uPred_holds P n (mcrename_iResUR μ μ' x)) _.
-Next Obligation.
+Lemma remove_mc_iResUR_op {Σ} μ (x x' : iResUR Σ) :
+  remove_mc_iResUR μ (x ⋅ x') ≡ remove_mc_iResUR μ x ⋅ remove_mc_iResUR μ x'.
 Proof.
-  intros Σ μ μ' P n1 n2 x1 x2 HP Hxs Hns; simpl in *.
-  eapply uPred_mono; [eassumption| |done].
-  apply mcrename_iResUR_mono; done.
+  intros i γ; rewrite /remove_mc_iResUR.
+  rewrite !discrete_fun_lookup_op !lookup_op.
+  destruct (remove_keys_in_mc μ (x i) !! γ) as [m|] eqn:Heqm;
+    destruct (remove_keys_in_mc μ (x' i) !! γ) as [m'|] eqn:Heqm'.
+  - apply in_remove_keys_in_mc in Heqm as (? & <-).
+    apply in_remove_keys_in_mc in Heqm' as (? & <-).
+    destruct (remove_keys_in_mc μ (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw; last first.
+    { rewrite Heqw.
+      eapply not_in_remove_keys_in_mc in Heqw as [|Hnin]; first done.
+      rewrite lookup_op in Hnin; rewrite Hnin; done. }
+    rewrite Heqw.
+    apply in_remove_keys_in_mc in Heqw as (? & <-).
+    rewrite lookup_op //.
+  - apply in_remove_keys_in_mc in Heqm as (? & <-).
+    apply not_in_remove_keys_in_mc in Heqm' as [| <-]; first done.
+    destruct (remove_keys_in_mc μ (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw;
+      rewrite Heqw; last first.
+    { eapply not_in_remove_keys_in_mc in Heqw as [| <-]; first done.
+      rewrite lookup_op //. }
+    apply in_remove_keys_in_mc in Heqw as (? & <-).
+    rewrite lookup_op //.
+  - apply in_remove_keys_in_mc in Heqm' as (? & <-).
+    apply not_in_remove_keys_in_mc in Heqm as [| <-]; first done.
+    destruct (remove_keys_in_mc μ (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw;
+      rewrite Heqw; last first.
+    { eapply not_in_remove_keys_in_mc in Heqw as [| <-]; first done.
+      rewrite lookup_op //. }
+    apply in_remove_keys_in_mc in Heqw as (? & <-).
+    rewrite lookup_op //.
+  - apply not_in_remove_keys_in_mc in Heqm as [|Heqm].
+    { destruct (remove_keys_in_mc μ (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw;
+        rewrite Heqw; last done.
+      apply in_remove_keys_in_mc in Heqw as (? & <-); done. }
+    apply not_in_remove_keys_in_mc in Heqm' as [|Heqm'].
+    { destruct (remove_keys_in_mc μ (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw;
+        rewrite Heqw; last done.
+      apply in_remove_keys_in_mc in Heqw as (? & <-); done. }
+    destruct (remove_keys_in_mc μ (x i ⋅ x' i) !! γ) as [w|] eqn:Heqw;
+      rewrite Heqw; last done.
+    apply in_remove_keys_in_mc in Heqw as (? & <-).
+    rewrite left_id lookup_op Heqm Heqm' //.
 Qed.
-Fail Next Obligation.
 
-Lemma mcrename_iResUR_valid {Σ} μ ν n (x : iResUR Σ) :
-  ✓{n} x → ✓{n} mcrename_iResUR μ ν x.
+Lemma remove_mc_iResUR_op_inv {Σ} μ n (z x y : iResUR Σ) :
+  remove_mc_iResUR μ z ≡{n}≡ x ⋅ y →
+  ∃ x' y' : iResUR Σ,
+    z ≡{n}≡ x' ⋅ y' ∧
+    x ≡{n}≡ remove_mc_iResUR μ x' ∧ y ≡{n}≡ remove_mc_iResUR μ y'.
+Proof.
+  intros Heq.
+  exists (x ⋅ rename_mc_iResUR μ μ z), y.
+
+Admitted.
+
+Lemma rename_mc_iResUR_mono {Σ} μ μ' (x x' : iResUR Σ) :
+  x ≼ x' → rename_mc_iResUR μ μ' x ≼ rename_mc_iResUR μ μ' x'.
+Proof.
+  intros [z Hincl]; exists (rename_mc_iResUR μ μ' z).
+  rewrite -rename_mc_iResUR_op Hincl //.
+Qed.
+
+Lemma rename_mc_iResUR_monoN {Σ} μ μ' n (x x' : iResUR Σ) :
+  x ≼{n} x' → rename_mc_iResUR μ μ' x ≼{n} rename_mc_iResUR μ μ' x'.
+Proof. 
+  intros [z Hincl]; exists (rename_mc_iResUR μ μ' z).
+  rewrite -rename_mc_iResUR_op Hincl //.
+Qed.
+
+Lemma remove_mc_iResUR_mono {Σ} μ (x x' : iResUR Σ) :
+  x ≼ x' → remove_mc_iResUR μ x ≼ remove_mc_iResUR μ x'.
+Proof.
+  intros [z Hincl]; exists (remove_mc_iResUR μ z).
+  rewrite -remove_mc_iResUR_op Hincl //.
+Qed.
+
+Lemma remove_mc_iResUR_monoN {Σ} μ n (x x' : iResUR Σ) :
+  x ≼{n} x' → remove_mc_iResUR μ x ≼{n} remove_mc_iResUR μ x'.
+Proof.
+  intros [z Hincl]; exists (remove_mc_iResUR μ z).
+  rewrite -remove_mc_iResUR_op Hincl //.
+Qed.
+
+Lemma rename_mc_iResUR_validN {Σ} μ ν n (x : iResUR Σ) :
+  ✓{n} x → ✓{n} rename_mc_iResUR μ ν x.
 Proof.
   intros Hvl i γ.
   destruct (mcrename_keys μ ν (x i) !! γ) as [m|] eqn:Heqm;
@@ -622,16 +937,259 @@ Proof.
   specialize (Hvl i δ); rewrite Hδ in Hvl; done.
 Qed.
 
-Lemma mcrename_iResUR_in_fresh_mcname {Σ} μ ν n (x y : iResUR Σ) :
-  ν ∉ (mcnames_of_iResUR y) → ✓{n} x → ✓{n} y → ✓{n} (mcrename_iResUR μ ν x ⋅ y).
+Lemma remove_mc_iResUR_validN {Σ} μ n (x : iResUR Σ) :
+  ✓{n} x → ✓{n} remove_mc_iResUR μ x.
+Proof.
+  intros Hvl i γ.
+  destruct (remove_keys_in_mc μ (x i) !! γ) as [m|] eqn:Heqm;
+    rewrite Heqm; last done.
+  apply in_remove_keys_in_mc in Heqm as [? Heqm].
+  specialize (Hvl i γ); rewrite Heqm in Hvl; done.
+Qed.
+
+(* the modality rename_mc *)
+
+Program Definition rename_mc {Σ} μ μ' (P : iProp Σ) : iProp Σ :=
+  UPred _ (λ n x, uPred_holds P n (rename_mc_iResUR μ μ' x)) _.
+Next Obligation.
+Proof.
+  intros Σ μ μ' P n1 n2 x1 x2 HP Hxs Hns; simpl in *.
+  eapply uPred_mono; [eassumption| |done].
+  apply rename_mc_iResUR_monoN; done.
+Qed.
+Fail Next Obligation.
+
+(* the modality remove_mc *)
+
+Program Definition remove_mc {Σ} μ (P : iProp Σ) : iProp Σ :=
+  UPred _ (λ n x, uPred_holds P n (remove_mc_iResUR μ x)) _.
+Next Obligation.
+Proof.
+  intros Σ μ P n1 n2 x1 x2 HP Hxs Hns; simpl in *.
+  eapply uPred_mono; [eassumption| |done].
+  apply remove_mc_iResUR_monoN; done.
+Qed.
+Fail Next Obligation.
+
+(* rules for the two modalities and their interaction *)
+Section modalities.
+  Context {Σ : gFunctors}.
+  Implicit Types P Q : iProp Σ.
+  Local Arguments uPred_holds {_} !_.
+
+  Lemma rename_mc_compose μ ν ρ P : rename_mc μ ν (rename_mc ν ρ P) ⊣⊢ rename_mc μ ρ P.
+  Proof. split; intros; rewrite /rename_mc /= rename_mc_iResUR_comp //. Qed.
+  
+  Lemma rename_mc_intros μ P : rename_mc μ μ P ⊢ P.
+  Proof.
+    split; rewrite /rename_mc /=; intros.
+    eapply uPred_mono; eauto using rename_mc_iResUR_includedN.
+  Qed.
+  
+  Lemma remove_mc_idemp μ P : remove_mc μ (remove_mc μ P) ⊣⊢ remove_mc μ P.
+  Proof.
+    split; rewrite /remove_mc /=; intros; rewrite remove_mc_iResUR_idemp //.
+  Qed.
+
+  Lemma remove_mc_intros μ P : remove_mc μ P ⊢ P.
+  Proof.
+    split; rewrite /remove_mc /=; intros.
+    eapply uPred_mono; eauto using remove_mc_iResUR_includedN.
+  Qed.
+
+  Lemma remove_mc_rename_mc_plainly μ ν P : remove_mc μ (rename_mc μ ν P) ⊣⊢ ■ P.
+  Proof.
+    split; unseal; intros; rewrite /remove_mc /rename_mc /=
+      rename_mc_remove_mc_iResUR_empty //.
+  Qed.
+
+  Lemma remove_mc_rename_mc_just_rename μ ν ρ P :
+    ρ ≠ μ → remove_mc ρ (rename_mc μ ν P) ⊣⊢ (rename_mc μ ν P).
+  Proof.
+    split; intros; rewrite /remove_mc /rename_mc /=
+      rename_mc_remove_mc_iResUR_id //.
+  Qed.
+
+  Lemma rename_mc_remove_mc_plainly μ ν P :
+    rename_mc ν μ (remove_mc μ P) ⊣⊢ ■ P.
+  Proof.
+    split; unseal; intros; rewrite /remove_mc /rename_mc /=
+      remove_mc_rename_mc_iResUR_emp //.
+  Qed.
+
+  Lemma rename_mc_remove_mc_just_rename μ ν ρ P :
+    ρ ≠ ν → rename_mc μ ν (remove_mc ρ P) ≡ rename_mc μ ν P.
+  Proof.
+    split; intros; rewrite /remove_mc /rename_mc /=
+      remove_mc_rename_mc_iResUR_id //.
+  Qed.
+
+  Lemma rename_mc_pure μ ν φ : rename_mc μ ν ⌜φ⌝ ⊣⊢@{iPropI Σ} ⌜φ⌝.
+  Proof. split; unseal; done. Qed.
+
+  Lemma rename_mc_emp μ ν P : rename_mc μ ν emp ⊣⊢@{iPropI Σ} emp.
+  Proof. split; unseal; done. Qed.
+
+  Lemma rename_mc_plainly μ ν P : rename_mc μ ν (■ P) ⊣⊢ ■ P.
+  Proof. split; unseal; done. Qed.
+  
+  Lemma plainly_rename_mc μ ν P : ■ (rename_mc μ ν P) ⊣⊢ ■ P.
+  Proof. split; unseal; done. Qed.
+
+  Lemma rename_mc_persistently μ ν P :
+    rename_mc μ ν (<pers> P) ⊣⊢ <pers> (rename_mc μ ν P).
+  Proof. split; unseal; intros; rewrite rename_mc_iResUR_core //. Qed.
+
+  Lemma rename_mc_later μ ν P :
+    rename_mc μ ν (▷ P) ⊣⊢ ▷ (rename_mc μ ν P).
+  Proof. split; unseal; done. Qed.
+
+  Lemma rename_mc_forall {A} μ ν (Φ : A → iProp Σ) :
+    rename_mc μ ν (∀ x, Φ x) ⊣⊢ ∀ x, rename_mc μ ν (Φ x).
+  Proof. split; unseal; done. Qed.
+
+  Lemma rename_mc_exist {A} μ ν (Φ : A → iProp Σ) :
+    rename_mc μ ν (∃ x, Φ x) ⊣⊢ ∃ x, rename_mc μ ν (Φ x).
+  Proof. split; unseal; done. Qed.
+
+  Lemma rename_mc_or μ ν P Q :
+    rename_mc μ ν (P ∨ Q) ⊣⊢ rename_mc μ ν P ∨ rename_mc μ ν Q.
+  Proof. split; unseal; done. Qed.
+
+  Lemma rename_mc_and μ ν P Q :
+    rename_mc μ ν (P ∧ Q) ⊣⊢ rename_mc μ ν P ∧ rename_mc μ ν Q.
+  Proof. split; unseal; done. Qed.
+
+  Lemma rename_mc_impl μ ν P Q :
+    rename_mc μ ν (P → Q) ⊢ (rename_mc μ ν P → rename_mc μ ν Q).
+  Proof.
+    split; unseal; simpl; intros ??? Hant; intros.
+    apply Hant; [|done| |done].
+    - by apply rename_mc_iResUR_mono.
+    - by apply rename_mc_iResUR_validN.
+  Qed.
+
+  Lemma rename_mc_sep μ ν P Q :
+    rename_mc μ ν (P ∗ Q) ⊣⊢ rename_mc μ ν P ∗ rename_mc μ ν Q.
+  Proof.
+    split; unseal; intros ???; split; intros (?&?& Heq &?&?).
+    - destruct (rename_mc_iResUR_op_inv _ _ _ _ _ _ Heq) as
+        (z & w & Hzw & Hz & Hw).
+      eexists; eexists; split; first done.
+      rewrite -Hz -Hw; auto.
+    - eexists (rename_mc_iResUR μ ν _);
+        eexists (rename_mc_iResUR μ ν _);
+        rewrite -rename_mc_iResUR_op Heq; eauto.
+  Qed.
+
+  Lemma rename_mc_wand μ ν P Q :
+    rename_mc μ ν (P -∗ Q) ⊢ (rename_mc μ ν P -∗ rename_mc μ ν Q).
+  Proof.
+    split; unseal; intros ??? Hant; intros.
+    rewrite rename_mc_iResUR_op.
+    apply Hant; [done| |done].
+    rewrite -rename_mc_iResUR_op. by apply rename_mc_iResUR_validN.
+  Qed.
+
+  Lemma rename_mc_except_0 μ ν P : rename_mc μ ν (◇ P) ⊣⊢ ◇ (rename_mc μ ν P).
+  Proof. rewrite /bi_except_0 rename_mc_or rename_mc_later rename_mc_pure //. Qed.
+
+  Lemma remove_mc_pure μ φ : remove_mc μ ⌜φ⌝ ⊣⊢@{iPropI Σ} ⌜φ⌝.
+  Proof. split; unseal; done. Qed.
+
+  Lemma remove_mc_emp μ P : remove_mc μ emp ⊣⊢@{iPropI Σ} emp.
+  Proof. split; unseal; done. Qed.
+
+  Lemma remove_mc_plainly μ P : remove_mc μ (■ P) ⊣⊢ ■ P.
+  Proof. split; unseal; done. Qed.
+  
+  Lemma plainly_remove_mc μ P : ■ (remove_mc μ P) ⊣⊢ ■ P.
+  Proof. split; unseal; done. Qed.
+
+  Lemma remove_mc_persistently μ P :
+    remove_mc μ (<pers> P) ⊣⊢ <pers> (remove_mc μ P).
+  Proof. split; unseal; intros; rewrite remove_mc_iResUR_core //. Qed.
+
+  Lemma remove_mc_later μ P :
+    remove_mc μ (▷ P) ⊣⊢ ▷ (remove_mc μ P).
+  Proof. split; unseal; done. Qed.
+
+  Lemma remove_mc_forall {A} μ (Φ : A → iProp Σ) :
+    remove_mc μ (∀ x, Φ x) ⊣⊢ ∀ x, remove_mc μ (Φ x).
+  Proof. split; unseal; done. Qed.
+
+  Lemma remove_mc_exist {A} μ (Φ : A → iProp Σ) :
+    remove_mc μ (∃ x, Φ x) ⊣⊢ ∃ x, remove_mc μ (Φ x).
+  Proof. split; unseal; done. Qed.
+
+  Lemma remove_mc_or μ P Q :
+    remove_mc μ (P ∨ Q) ⊣⊢ remove_mc μ P ∨ remove_mc μ Q.
+  Proof. split; unseal; done. Qed.
+
+  Lemma remove_mc_and μ P Q :
+    remove_mc μ (P ∧ Q) ⊣⊢ remove_mc μ P ∧ remove_mc μ Q.
+  Proof. split; unseal; done. Qed.
+
+  Lemma remove_mc_impl μ P Q :
+    remove_mc μ (P → Q) ⊢ (remove_mc μ P → remove_mc μ Q).
+  Proof.
+    split; unseal; simpl; intros ??? Hant; intros.
+    apply Hant; [|done| |done].
+    - by apply remove_mc_iResUR_mono.
+    - by apply remove_mc_iResUR_validN.
+  Qed.
+
+  Lemma remove_mc_sep μ P Q :
+    remove_mc μ (P ∗ Q) ⊣⊢ remove_mc μ P ∗ remove_mc μ Q.
+  Proof.
+    split; unseal; intros ???; split; intros (?&?& Heq &?&?).
+    - destruct (remove_mc_iResUR_op_inv _ _ _ _ _ Heq) as
+        (z & w & Hzw & Hz & Hw).
+      eexists; eexists; split; first done.
+      rewrite -Hz -Hw; auto.
+    - eexists (remove_mc_iResUR μ _);
+        eexists (remove_mc_iResUR μ _);
+        rewrite -remove_mc_iResUR_op Heq; eauto.
+  Qed.
+
+  Lemma remove_mc_wand μ P Q :
+    remove_mc μ (P -∗ Q) ⊢ (remove_mc μ P -∗ remove_mc μ Q).
+  Proof.
+    split; unseal; intros ??? Hant; intros.
+    rewrite remove_mc_iResUR_op.
+    apply Hant; [done| |done].
+    rewrite -remove_mc_iResUR_op. by apply remove_mc_iResUR_validN.
+  Qed.
+
+  Lemma remove_mc_except_0 μ P : remove_mc μ (◇ P) ⊣⊢ ◇ (remove_mc μ P).
+  Proof. rewrite /bi_except_0 remove_mc_or remove_mc_later remove_mc_pure //. Qed.
+
+End modalities.
+  
+(* type classes for ownership inside and outside a microcosm. *)
+Class InsideMC {Σ} (μ : mcname) (P : iProp Σ) := inside_mc : P ⊢ rename_mc μ μ P.
+Global Arguments inside_mc {Σ} μ P%_I.
+Global Hint Mode InsideMC + + ! : typeclass_instances.
+Global Instance: Params (@inside_mc) 4 := {}.
+Global Typeclasses Opaque inside_mc.
+
+Class OutsideMC {Σ} (μ : mcname) (P : iProp Σ) := outside_mc : P ⊢ remove_mc μ P.
+Global Arguments outside_mc {Σ} μ P%_I.
+Global Hint Mode OutsideMC + + ! : typeclass_instances.
+Global Instance: Params (@outside_mc) 4 := {}.
+Global Typeclasses Opaque outside_mc.
+
+(* creating a new microcosm *)
+
+Lemma rename_mc_iResUR_in_fresh_mcname {Σ} μ ν n (x y : iResUR Σ) :
+  ν ∉ (mcnames_of_iResUR y) → ✓{n} x → ✓{n} y → ✓{n} (rename_mc_iResUR μ ν x ⋅ y).
 Proof.
   intros Hfresh Hvlx Hvlf i γ.
   rewrite discrete_fun_lookup_op.
   destruct ((mcrename_keys μ ν (x i) ⋅ y i) !! γ) as [m|] eqn:Heqm;
     rewrite Heqm; last done.
   rewrite lookup_op in Heqm.
-  destruct (mcrename_keys μ ν (x i) !! γ) as [w|] eqn:Heqw;
-    rewrite Heqw in Heqm; last first.
+  destruct (mcrename_keys μ ν (x i) !! γ) as [w|] eqn:Heqw; last first.
   { rewrite left_id in Heqm.
     specialize (Hvlf i γ).
     rewrite -Heqm; done. }
@@ -659,20 +1217,21 @@ Section new_microcosm.
     rewrite /rename_mc; unseal.
     split; intros n x Hvl HP M k f Hkn Hvl'; simpl in *.
     rewrite left_id in Hvl'.
-    exists (mcrename_iResUR μ (fresh_mcname f M) x).
+    exists (rename_mc_iResUR μ (fresh_mcname f M) x).
     pose proof (fresh_mcname_is_fresh f M).
     split.
-    { apply mcrename_iResUR_in_fresh_mcname;
+    { apply rename_mc_iResUR_in_fresh_mcname;
       [set_solver|by eapply cmra_validN_le|done]. }
     eexists (fresh_mcname f M), ε, _; split; first by rewrite left_id.
     split; first set_solver.
-    rewrite mcrename_iResUR_comp.
+    rewrite rename_mc_iResUR_comp.
     eapply uPred_holds_ne; eauto.
-    eapply mcrename_iResUR_valid, cmra_validN_le; eauto.
+    eapply rename_mc_iResUR_valid, cmra_validN_le; eauto.
   Qed.
 End new_microcosm.
 
-(*  ownership *)
+(* ownership;
+   most of what's below is taken and adapted from Iris development's own.v file. *)
 
 Local Definition mcown_def `{!inG Σ A} (μ : mcname) (γ : gname) (a : A) : iProp Σ :=
   own (push_mcname μ γ) a.
@@ -741,7 +1300,7 @@ Proof. rewrite !mcown_eq. solve_proper. Qed.
 Global Instance mcown_proper μ γ :
   Proper ((≡) ==> (⊣⊢)) (@mcown Σ A _ μ γ) := ne_proper _.
 
-Section rename_mcown.
+Section rename_remove_mcown.
   Local Arguments uPred_holds {_} !_.
   
   Lemma rename_mcown μ ν γ a :
@@ -753,7 +1312,7 @@ Section rename_mcown.
     rewrite !iRes_singleton_included.
     split.
     - intros (b & Hlu & c & Hc).
-      rewrite /mcrename_iResUR in Hlu.
+      rewrite /rename_mc_iResUR in Hlu.
       destruct (mcrename_keys ν μ (x (inG_id i)) !! push_mcname μ γ) as [b'|] eqn:Hb'; last first.
       {rewrite Hb' in Hlu; inversion Hlu. }
       assert (b ≡{n}≡ b') as Hbb'.
@@ -763,7 +1322,7 @@ Section rename_mcown.
       { erewrite <- mcrename_to_push; last done. rewrite Hlu' //. }
       exists c; rewrite -Hbb'; done.
     - intros (b & Hlu & c & Hc).
-      rewrite /mcrename_iResUR.
+      rewrite /rename_mc_iResUR.
       pose proof (mcrename_of_push ν μ γ) as Hγ.
       destruct (mcrename_keys ν μ (x (inG_id i)) !! push_mcname μ γ) as [b'|] eqn:Hb'; last first.
       { eapply not_in_mcrename_keys' in Hb'; last done.
@@ -776,7 +1335,16 @@ Section rename_mcown.
       { rewrite Hb'; done. }
       exists c; rewrite -Hbb'; done.
   Qed.
-End rename_mcown.
+
+  Lemma rename_mcown μ ν γ a :
+    rename_mc ν μ (mcown μ γ a) ⊣⊢ mcown ν γ a.
+  Proof.
+
+End rename_remove_mcown.
+
+Lemma mcown_inside μ ν γ a :
+    rename_mc ν μ (mcown μ γ a) ⊣⊢ mcown ν γ a.
+  Proof.
 
 Lemma mcown_op μ γ a1 a2 : mcown μ γ (a1 ⋅ a2) ⊣⊢ mcown μ γ a1 ∗ mcown μ γ a2.
 Proof. by rewrite !mcown_eq /mcown_def own_op. Qed.
@@ -851,155 +1419,127 @@ Proof.
       intros []%push_mcname_inj; simplify_eq; set_solver.
 Qed.
 
-(** ** Allocation *)
-(* TODO: This also holds if we just have ✓ a at the current step-idx, as Iris
-  assertion. However, the map_updateP_alloc does not suffice to show this. *)
-Lemma own_alloc_strong_dep (f : gname → A) (P : gname → Prop) :
-  pred_infinite P →
-  (∀ γ, P γ → ✓ (f γ)) →
-  ⊢ |==> ∃ γ, ⌜P γ⌝ ∗ own γ (f γ).
-Proof.
-  intros HPinf Hf.
-  rewrite -(bupd_mono (∃ m, ⌜∃ γ, P γ ∧ m = iRes_singleton γ (f γ)⌝ ∧ uPred_ownM m)%I).
-  - rewrite /bi_emp_valid (ownM_unit emp).
-    apply bupd_ownM_updateP, (discrete_fun_singleton_updateP_empty _ (λ m, ∃ γ,
-      m = {[ γ := inG_unfold (cmra_transport inG_prf (f γ)) ]} ∧ P γ));
-      [|naive_solver].
-    apply (alloc_updateP_strong_dep _ P _ (λ γ,
-      inG_unfold (cmra_transport inG_prf (f γ)))); [done| |naive_solver].
-    intros γ _ ?.
-    by apply (cmra_morphism_valid inG_unfold), cmra_transport_valid, Hf.
-  - apply exist_elim=>m; apply pure_elim_l=>-[γ [Hfresh ->]].
-    by rewrite !own_eq /own_def -(exist_intro γ) pure_True // left_id.
-Qed.
- 
-Lemma own_alloc_cofinite_dep (f : gname → A) (G : gset gname) :
-  (∀ γ, γ ∉ G → ✓ (f γ)) → ⊢ |==> ∃ γ, ⌜γ ∉ G⌝ ∗ own γ (f γ).
+Lemma mcown_alloc_cofinite_dep (f : mcname → gname → A)
+  (M : gset mcname) (G : gset gname) :
+  (∀ μ γ, μ ∈ M → γ ∉ G → ✓ (f μ γ)) →
+  ⊢ |==> ∃ γ, ⌜γ ∉ G⌝ ∗ [∗ set] μ ∈ M, mcown μ γ (f μ γ).
 Proof.
   intros Ha.
-  apply (own_alloc_strong_dep f (λ γ, γ ∉ G))=> //.
+  apply (mcown_alloc_strong_dep f M (λ γ, γ ∉ G))=> //.
   apply (pred_infinite_set (C:=gset gname)).
   intros E. set (γ := fresh (G ∪ E)).
   exists γ. apply not_elem_of_union, is_fresh.
 Qed.
-Lemma own_alloc_dep (f : gname → A) :
-  (∀ γ, ✓ (f γ)) → ⊢ |==> ∃ γ, own γ (f γ).
+Lemma mcown_alloc_dep (f : mcname → gname → A) (M : gset mcname) :
+  (∀ μ γ, μ ∈ M → ✓ (f μ γ)) → ⊢ |==> ∃ γ, [∗ set] μ ∈ M, mcown μ γ (f μ γ).
 Proof.
-  intros Ha. rewrite /bi_emp_valid (own_alloc_cofinite_dep f ∅) //; [].
+  intros Ha. rewrite /bi_emp_valid (mcown_alloc_cofinite_dep f M ∅); last by auto.
   apply bupd_mono, exist_mono=>?. apply: sep_elim_r.
 Qed.
 
-Lemma own_alloc_strong a (P : gname → Prop) :
+Lemma mcown_alloc_strong a (M : gset mcname) (P : gname → Prop) :
   pred_infinite P →
-  ✓ a → ⊢ |==> ∃ γ, ⌜P γ⌝ ∗ own γ a.
-Proof. intros HP Ha. eapply (own_alloc_strong_dep (λ _, a)); eauto. Qed.
-Lemma own_alloc_cofinite a (G : gset gname) :
-  ✓ a → ⊢ |==> ∃ γ, ⌜γ ∉ G⌝ ∗ own γ a.
-Proof. intros Ha. eapply (own_alloc_cofinite_dep (λ _, a)); eauto. Qed.
-Lemma own_alloc a : ✓ a → ⊢ |==> ∃ γ, own γ a.
-Proof. intros Ha. eapply (own_alloc_dep (λ _, a)); eauto. Qed.
+  ✓ a → ⊢ |==> ∃ γ, ⌜P γ⌝ ∗ [∗ set] μ ∈ M, mcown μ γ a.
+Proof. intros HP Ha. eapply (mcown_alloc_strong_dep (λ _ _, a)); eauto. Qed.
+Lemma mcown_alloc_cofinite a (M : gset mcname) (G : gset gname) :
+  ✓ a → ⊢ |==> ∃ γ, ⌜γ ∉ G⌝ ∗ [∗ set] μ ∈ M, mcown μ γ a.
+Proof. intros Ha. eapply (mcown_alloc_cofinite_dep (λ _ _, a)); eauto. Qed.
+Lemma mcown_alloc a (M : gset mcname) : ✓ a → ⊢ |==> ∃ γ, [∗ set] μ ∈ M, mcown μ γ a.
+Proof. intros Ha. eapply (mcown_alloc_dep (λ _ _, a)); eauto. Qed.
+
+Lemma mcown_alloc_strong' a μ (P : gname → Prop) :
+  pred_infinite P →
+  ✓ a → ⊢ |==> ∃ γ, ⌜P γ⌝ ∗ mcown μ γ a.
+Proof.
+  intros HP Ha.
+  iPoseProof (mcown_alloc_strong a {[μ]}) as "H"; eauto; [].
+  iMod "H" as (?) "[? ?]"; rewrite big_sepS_singleton; iFrame; done.
+Qed.
+Lemma mcown_alloc_cofinite' a μ (G : gset gname) :
+  ✓ a → ⊢ |==> ∃ γ, ⌜γ ∉ G⌝ ∗ mcown μ γ a.
+Proof.
+  intros Ha.
+  iPoseProof (mcown_alloc_cofinite a {[μ]}) as "H"; eauto; [].
+  iMod "H" as (?) "[? ?]"; rewrite big_sepS_singleton; iFrame; done.
+Qed.
+Lemma mcown_alloc' a μ : ✓ a → ⊢ |==> ∃ γ, mcown μ γ a.
+Proof.
+  intros Ha.
+  iPoseProof (mcown_alloc a {[μ]}) as "H"; eauto; [].
+  iMod "H" as (?) "?"; rewrite big_sepS_singleton; iFrame; done.
+Qed.
 
 (** ** Frame preserving updates *)
-Lemma own_updateP P γ a : a ~~>: P → own γ a ⊢ |==> ∃ a', ⌜P a'⌝ ∗ own γ a'.
-Proof.
-  intros Hupd. rewrite !own_eq.
-  rewrite -(bupd_mono (∃ m,
-    ⌜ ∃ a', m = iRes_singleton γ a' ∧ P a' ⌝ ∧ uPred_ownM m)%I).
-  - apply bupd_ownM_updateP, (discrete_fun_singleton_updateP _ (λ m, ∃ x,
-      m = {[ γ := x ]} ∧ ∃ x',
-      x = inG_unfold x' ∧ ∃ a',
-      x' = cmra_transport inG_prf a' ∧ P a')); [|naive_solver].
-    apply singleton_updateP', (iso_cmra_updateP' inG_fold).
-    { apply inG_unfold_fold. }
-    { apply (cmra_morphism_op _). }
-    { apply inG_unfold_validN. }
-    by apply cmra_transport_updateP'.
-  - apply exist_elim=> m; apply pure_elim_l=> -[a' [-> HP]].
-    rewrite -(exist_intro a'). rewrite -persistent_and_sep.
-    by apply and_intro; [apply pure_intro|].
-Qed.
+Lemma mcown_updateP P μ γ a : a ~~>: P → mcown μ γ a ⊢ |==> ∃ a', ⌜P a'⌝ ∗ mcown μ γ a'.
+Proof. by intros; rewrite !mcown_eq /mcown_def; apply own_updateP. Qed.
 
-Lemma own_update γ a a' : a ~~> a' → own γ a ⊢ |==> own γ a'.
-Proof.
-  intros. iIntros "?".
-  iMod (own_updateP (a' =.) with "[$]") as (a'') "[-> $]".
-  { by apply cmra_update_updateP. }
-  done.
-Qed.
-Lemma own_update_2 γ a1 a2 a' :
-  a1 ⋅ a2 ~~> a' → own γ a1 -∗ own γ a2 ==∗ own γ a'.
-Proof. intros. apply entails_wand, wand_intro_r. rewrite -own_op. by iApply own_update. Qed.
-Lemma own_update_3 γ a1 a2 a3 a' :
-  a1 ⋅ a2 ⋅ a3 ~~> a' → own γ a1 -∗ own γ a2 -∗ own γ a3 ==∗ own γ a'.
-Proof. intros. apply entails_wand. do 2 apply wand_intro_r. rewrite -!own_op. by iApply own_update. Qed.
+Lemma mcown_update μ γ a a' : a ~~> a' → mcown μ γ a ⊢ |==> mcown μ γ a'.
+Proof. by intros; rewrite !mcown_eq /mcown_def; apply own_update. Qed.
+Lemma mcown_update_2 μ γ a1 a2 a' :
+  a1 ⋅ a2 ~~> a' → mcown μ γ a1 -∗ mcown μ γ a2 ==∗ mcown μ γ a'.
+Proof. by intros; rewrite !mcown_eq /mcown_def; apply own_update_2. Qed.
+Lemma mcown_update_3 μ γ a1 a2 a3 a' :
+  a1 ⋅ a2 ⋅ a3 ~~> a' → mcown μ γ a1 -∗ mcown μ γ a2 -∗ mcown μ γ a3 ==∗ mcown μ γ a'.
+Proof. by intros; rewrite !mcown_eq /mcown_def; apply own_update_3. Qed.
 End global.
 
-Global Arguments own_valid {_ _} [_] _ _.
-Global Arguments own_valid_2 {_ _} [_] _ _ _.
-Global Arguments own_valid_3 {_ _} [_] _ _ _ _.
-Global Arguments own_valid_l {_ _} [_] _ _.
-Global Arguments own_valid_r {_ _} [_] _ _.
-Global Arguments own_updateP {_ _} [_] _ _ _ _.
-Global Arguments own_update {_ _} [_] _ _ _ _.
-Global Arguments own_update_2 {_ _} [_] _ _ _ _ _.
-Global Arguments own_update_3 {_ _} [_] _ _ _ _ _ _.
+Global Arguments mcown_valid {_ _} [_] _ _ _.
+Global Arguments mcown_valid_2 {_ _} [_] _ _ _ _.
+Global Arguments mcown_valid_3 {_ _} [_] _ _ _ _ _.
+Global Arguments mcown_valid_l {_ _} [_] _ _ _.
+Global Arguments mcown_valid_r {_ _} [_] _ _ _.
+Global Arguments mcown_updateP {_ _} [_] _ _ _ _ _.
+Global Arguments mcown_update {_ _} [_] _ _ _ _ _.
+Global Arguments mcown_update_2 {_ _} [_] _ _ _ _ _ _.
+Global Arguments mcown_update_3 {_ _} [_] _ _ _ _ _ _ _.
 
-Lemma own_unit A `{i : !inG Σ (A:ucmra)} γ : ⊢ |==> own γ (ε:A).
-Proof.
-  rewrite /bi_emp_valid (ownM_unit emp) !own_eq /own_def.
-  apply bupd_ownM_update, discrete_fun_singleton_update_empty.
-  apply (alloc_unit_singleton_update (inG_unfold (cmra_transport inG_prf ε))).
-  - apply (cmra_morphism_valid _), cmra_transport_valid, ucmra_unit_valid.
-  - intros x. rewrite -(inG_unfold_fold x) -(cmra_morphism_op inG_unfold).
-    f_equiv. generalize (inG_fold x)=> x'.
-    destruct inG_prf=> /=. by rewrite left_id.
-  - done.
-Qed.
+Lemma mcown_unit A `{i : !inG Σ (A:ucmra)} μ γ : ⊢ |==> mcown μ γ (ε:A).
+Proof. rewrite mcown_eq /mcown_def; apply own_unit. Qed.
 
 (** Big op class instances *)
 Section big_op_instances.
   Context `{!inG Σ (A:ucmra)}.
 
-  Global Instance own_cmra_sep_homomorphism γ :
-    WeakMonoidHomomorphism op uPred_sep (≡) (own γ).
-  Proof. split; try apply _. apply own_op. Qed.
+  Global Instance own_cmra_sep_homomorphism μ γ :
+    WeakMonoidHomomorphism op uPred_sep (≡) (mcown μ γ).
+  Proof. split; try apply _. apply mcown_op. Qed.
 
-  Lemma big_opL_own {B} γ (f : nat → B → A) (l : list B) :
+  Lemma big_opL_mcown {B} μ γ (f : nat → B → A) (l : list B) :
     l ≠ [] →
-    own γ ([^op list] k↦x ∈ l, f k x) ⊣⊢ [∗ list] k↦x ∈ l, own γ (f k x).
+    mcown μ γ ([^op list] k↦x ∈ l, f k x) ⊣⊢ [∗ list] k↦x ∈ l, mcown μ γ (f k x).
   Proof. apply (big_opL_commute1 _). Qed.
-  Lemma big_opM_own `{Countable K} {B} γ (g : K → B → A) (m : gmap K B) :
+  Lemma big_opM_mcown `{Countable K} {B} μ γ (g : K → B → A) (m : gmap K B) :
     m ≠ ∅ →
-    own γ ([^op map] k↦x ∈ m, g k x) ⊣⊢ [∗ map] k↦x ∈ m, own γ (g k x).
+    mcown μ γ ([^op map] k↦x ∈ m, g k x) ⊣⊢ [∗ map] k↦x ∈ m, mcown μ γ (g k x).
   Proof. apply (big_opM_commute1 _). Qed.
-  Lemma big_opS_own `{Countable B} γ (g : B → A) (X : gset B) :
+  Lemma big_opS_mcown `{Countable B} μ γ (g : B → A) (X : gset B) :
     X ≠ ∅ →
-    own γ ([^op set] x ∈ X, g x) ⊣⊢ [∗ set] x ∈ X, own γ (g x).
+    mcown μ γ ([^op set] x ∈ X, g x) ⊣⊢ [∗ set] x ∈ X, mcown μ γ (g x).
   Proof. apply (big_opS_commute1 _). Qed.
-  Lemma big_opMS_own `{Countable B} γ (g : B → A) (X : gmultiset B) :
+  Lemma big_opMS_mcown `{Countable B} μ γ (g : B → A) (X : gmultiset B) :
     X ≠ ∅ →
-    own γ ([^op mset] x ∈ X, g x) ⊣⊢ [∗ mset] x ∈ X, own γ (g x).
+    mcown μ γ ([^op mset] x ∈ X, g x) ⊣⊢ [∗ mset] x ∈ X, mcown μ γ (g x).
   Proof. apply (big_opMS_commute1 _). Qed.
 
-  Global Instance own_cmra_sep_entails_homomorphism γ :
-    MonoidHomomorphism op uPred_sep (⊢) (own γ).
+  Global Instance own_cmra_sep_entails_homomorphism μ γ :
+    MonoidHomomorphism op uPred_sep (⊢) (mcown μ γ).
   Proof.
     split; [split|]; try apply _.
-    - intros. by rewrite own_op.
+    - intros. by rewrite mcown_op.
     - apply (affine _).
   Qed.
 
-  Lemma big_opL_own_1 {B} γ (f : nat → B → A) (l : list B) :
-    own γ ([^op list] k↦x ∈ l, f k x) ⊢ [∗ list] k↦x ∈ l, own γ (f k x).
+  Lemma big_opL_mcown_1 {B} μ γ (f : nat → B → A) (l : list B) :
+    mcown μ γ ([^op list] k↦x ∈ l, f k x) ⊢ [∗ list] k↦x ∈ l, mcown μ γ (f k x).
   Proof. apply (big_opL_commute _). Qed.
-  Lemma big_opM_own_1 `{Countable K} {B} γ (g : K → B → A) (m : gmap K B) :
-    own γ ([^op map] k↦x ∈ m, g k x) ⊢ [∗ map] k↦x ∈ m, own γ (g k x).
+  Lemma big_opM_mcown_1 `{Countable K} {B} μ γ (g : K → B → A) (m : gmap K B) :
+    mcown μ γ ([^op map] k↦x ∈ m, g k x) ⊢ [∗ map] k↦x ∈ m, mcown μ γ (g k x).
   Proof. apply (big_opM_commute _). Qed.
-  Lemma big_opS_own_1 `{Countable B} γ (g : B → A) (X : gset B) :
-    own γ ([^op set] x ∈ X, g x) ⊢ [∗ set] x ∈ X, own γ (g x).
+  Lemma big_opS_mcown_1 `{Countable B} μ γ (g : B → A) (X : gset B) :
+    mcown μ γ ([^op set] x ∈ X, g x) ⊢ [∗ set] x ∈ X, mcown μ γ (g x).
   Proof. apply (big_opS_commute _). Qed.
-  Lemma big_opMS_own_1 `{Countable B} γ (g : B → A) (X : gmultiset B) :
-    own γ ([^op mset] x ∈ X, g x) ⊢ [∗ mset] x ∈ X, own γ (g x).
+  Lemma big_opMS_mcown_1 `{Countable B} μ γ (g : B → A) (X : gmultiset B) :
+    mcown μ γ ([^op mset] x ∈ X, g x) ⊢ [∗ mset] x ∈ X, mcown μ γ (g x).
   Proof. apply (big_opMS_commute _). Qed.
 End big_op_instances.
 
@@ -1008,178 +1548,109 @@ Section proofmode_instances.
   Context `{!inG Σ A}.
   Implicit Types a b : A.
 
-  Global Instance into_sep_own γ a b1 b2 :
-    IsOp a b1 b2 → IntoSep (own γ a) (own γ b1) (own γ b2).
-  Proof. intros. by rewrite /IntoSep (is_op a) own_op. Qed.
-  Global Instance into_and_own p γ a b1 b2 :
-    IsOp a b1 b2 → IntoAnd p (own γ a) (own γ b1) (own γ b2).
-  Proof. intros. by rewrite /IntoAnd (is_op a) own_op sep_and. Qed.
+  Global Instance into_sep_mcown μ γ a b1 b2 :
+    IsOp a b1 b2 → IntoSep (mcown μ γ a) (mcown μ γ b1) (mcown μ γ b2).
+  Proof. intros. by rewrite /IntoSep (is_op a) mcown_op. Qed.
+  Global Instance into_and_mcown p μ γ a b1 b2 :
+    IsOp a b1 b2 → IntoAnd p (mcown μ γ a) (mcown μ γ b1) (mcown μ γ b2).
+  Proof. intros. by rewrite /IntoAnd (is_op a) mcown_op sep_and. Qed.
 
-  Global Instance from_sep_own γ a b1 b2 :
-    IsOp a b1 b2 → FromSep (own γ a) (own γ b1) (own γ b2).
-  Proof. intros. by rewrite /FromSep -own_op -is_op. Qed.
+  Global Instance from_sep_mcown μ γ a b1 b2 :
+    IsOp a b1 b2 → FromSep (mcown μ γ a) (mcown μ γ b1) (mcown μ γ b2).
+  Proof. intros. by rewrite /FromSep -mcown_op -is_op. Qed.
   (* TODO: Improve this instance with generic own simplification machinery
   once https://gitlab.mpi-sws.org/iris/iris/-/issues/460 is fixed *)
   (* Cost > 50 to give priority to [combine_sep_as_fractional]. *)
-  Global Instance combine_sep_as_own γ a b1 b2 :
-    IsOp a b1 b2 → CombineSepAs (own γ b1) (own γ b2) (own γ a) | 60.
-  Proof. intros. by rewrite /CombineSepAs -own_op -is_op. Qed.
+  Global Instance combine_sep_as_mcown μ γ a b1 b2 :
+    IsOp a b1 b2 → CombineSepAs (mcown μ γ b1) (mcown μ γ b2) (mcown μ γ a) | 60.
+  Proof. intros. by rewrite /CombineSepAs -mcown_op -is_op. Qed.
   (* TODO: Improve this instance with generic own validity simplification
   machinery once https://gitlab.mpi-sws.org/iris/iris/-/issues/460 is fixed *)
-  Global Instance combine_sep_gives_own γ b1 b2 :
-    CombineSepGives (own γ b1) (own γ b2) (✓ (b1 ⋅ b2)).
+  Global Instance combine_sep_gives_mcown μ γ b1 b2 :
+    CombineSepGives (mcown μ γ b1) (mcown μ γ b2) (✓ (b1 ⋅ b2)).
   Proof.
-    intros. rewrite /CombineSepGives -own_op own_valid.
+    intros. rewrite /CombineSepGives -mcown_op mcown_valid.
     by apply: bi.persistently_intro.
   Qed.
-  Global Instance from_and_own_persistent γ a b1 b2 :
+  Global Instance from_and_mcown_persistent μ γ a b1 b2 :
     IsOp a b1 b2 → TCOr (CoreId b1) (CoreId b2) →
-    FromAnd (own γ a) (own γ b1) (own γ b2).
+    FromAnd (mcown μ γ a) (mcown μ γ b1) (mcown μ γ b2).
   Proof.
-    intros ? Hb. rewrite /FromAnd (is_op a) own_op.
+    intros ? Hb. rewrite /FromAnd (is_op a) mcown_op.
     destruct Hb; by rewrite persistent_and_sep.
   Qed.
 End proofmode_instances.
 
-Section own_forall.
+Section mcown_forall.
   Context `{i : !inG Σ A}.
   Implicit Types a c : A.
   Implicit Types x z : iResUR Σ.
 
-  (** Our main goal in this section is to prove [own_forall]:
+  (** Our main goal in this section is to prove [mcown_forall]:
 
+    (∀ b, mcown μ γ (f b)) ⊢ ∃ c : A, mcown μ γ c ∗ (∀ b, Some (f b) ≼ Some c)
+    
+    We have the analogue for own: in the global ucmra, from [ownM_forall]:
+    
     (∀ b, own γ (f b)) ⊢ ∃ c : A, own γ c ∗ (∀ b, Some (f b) ≼ Some c)
+  *)
 
-  We have the analogue in the global ucmra, from [ownM_forall]:
-
-    (∀ a, uPred_ownM (f a)) ⊢ ∃ z : iRes Σ, uPred_ownM z ∧ (∀ a, f a ≼ z)
-
-  We need to relate [uPred_ownM (iRes_singleton γ _)] to [own γ _] so that we
-  can bring this theorem from the global ucmra world to the [A] world.
-  In particular, [ownM_forall] gives us some [z] in the ucmra world, but to prove
-  the theorem in the end, we need to supply a witness [z'] in the [A] world.
-  We start by defining the [iRes_project] function to map from the ucmra world
-  to the [A] world, basically an inverse of [iRes_singleton]: *)
-
-  Local Definition iRes_project (γ : gname) (x : iResUR Σ) : option A :=
-    cmra_transport (eq_sym inG_prf) ∘ inG_fold <$> x (inG_id i) !! γ.
-
-  (* Now we prove some properties about [iRes_project] *)
-  Local Lemma iRes_project_op γ x y :
-    iRes_project γ (x ⋅ y) ≡@{option A} iRes_project γ x ⋅ iRes_project γ y.
-  Proof.
-    rewrite /iRes_project lookup_op.
-    case: (x (inG_id i) !! γ)=> [x1|]; case: (y (inG_id i) !! γ)=> [y1|] //=.
-    rewrite -Some_op -cmra_transport_op. do 2 f_equiv. apply: cmra_morphism_op.
-  Qed.
-
-  Local Instance iRes_project_ne γ : NonExpansive (iRes_project γ).
-  Proof. intros n x1 x2 Hx. rewrite /iRes_project. do 2 f_equiv. apply Hx. Qed.
-
-  Local Lemma iRes_project_singleton γ a :
-    iRes_project γ (iRes_singleton γ a) ≡ Some a.
-  Proof.
-    rewrite /iRes_project /iRes_singleton discrete_fun_lookup_singleton.
-    rewrite lookup_singleton /= inG_fold_unfold.
-    by rewrite cmra_transport_trans eq_trans_sym_inv_r.
-  Qed.
-
-  (** The singleton result [c] of [iRes_project γ z] is below [z] *)
-  Local Lemma iRes_project_below γ z c :
-    iRes_project γ z = Some c → iRes_singleton γ c ≼ z.
-  Proof.
-    rewrite /iRes_project /iRes_singleton fmap_Some.
-    intros (a' & Hγ & ->). rewrite cmra_transport_trans eq_trans_sym_inv_l /=.
-    exists (discrete_fun_insert (inG_id i) (delete γ (z (inG_id i))) z).
-    intros j. rewrite discrete_fun_lookup_op.
-    destruct (decide (j = inG_id i)) as [->|]; last first.
-    { rewrite discrete_fun_lookup_singleton_ne //.
-      rewrite discrete_fun_lookup_insert_ne //. by rewrite left_id. }
-    rewrite discrete_fun_lookup_singleton discrete_fun_lookup_insert.
-    intros γ'. rewrite lookup_op. destruct (decide (γ' = γ)) as [->|].
-    - by rewrite lookup_singleton lookup_delete Hγ inG_unfold_fold.
-    - by rewrite lookup_singleton_ne // lookup_delete_ne // left_id.
-  Qed.
-
-  (** If another singleton [c] is below [z], [iRes_project] is above [c]. *)
-  Local Lemma iRes_project_above γ z c :
-    iRes_singleton γ c ≼ z ⊢@{iProp Σ} Some c ≼ iRes_project γ z.
-  Proof.
-    iIntros "#[%x Hincl]". iExists (iRes_project γ x).
-    rewrite -(iRes_project_singleton γ) -iRes_project_op.
-    by iRewrite "Hincl".
-  Qed.
-
-  (** Finally we tie it all together.
-  As usual, we use [Some a ≼ Some c] for the reflexive closure of [a ≼ c]. *)
-  Lemma own_forall `{!Inhabited B} γ (f : B → A) :
-    (∀ b, own γ (f b)) ⊢ ∃ c, own γ c ∗ (∀ b, Some (f b) ≼ Some c).
-  Proof.
-    rewrite own_eq /own_def. iIntros "Hown".
-    iDestruct (ownM_forall with "Hown") as (z) "[Hown Hincl]".
-    destruct (iRes_project γ z) as [c|] eqn:Hc.
-    - iExists c. iSplitL "Hown".
-      { iApply (ownM_mono with "Hown"). by apply iRes_project_below. }
-      iIntros (b). rewrite -Hc. by iApply iRes_project_above.
-    - iDestruct ("Hincl" $! inhabitant) as "Hincl".
-      iDestruct (iRes_project_above with "Hincl") as "Hincl".
-      rewrite Hc. iDestruct "Hincl" as (mx) "H".
-      rewrite option_equivI. by destruct mx.
-  Qed.
+  Lemma mcown_forall `{!Inhabited B} μ γ (f : B → A) :
+    (∀ b, mcown μ γ (f b)) ⊢ ∃ c, mcown μ γ c ∗ (∀ b, Some (f b) ≼ Some c).
+  Proof. rewrite mcown_eq /mcown_def; iIntros "Hown"; by iApply @own_forall. Qed.
 
   (** Now some corollaries. *)
-  Lemma own_forall_total `{!CmraTotal A, !Inhabited B} γ (f : B → A) :
-    (∀ b, own γ (f b)) ⊢ ∃ c, own γ c ∗ (∀ b, f b ≼ c).
-  Proof. setoid_rewrite <-Some_included_totalI. apply own_forall. Qed.
+  Lemma mcown_forall_total `{!CmraTotal A, !Inhabited B} μ γ (f : B → A) :
+    (∀ b, mcown μ γ (f b)) ⊢ ∃ c, mcown μ γ c ∗ (∀ b, f b ≼ c).
+  Proof. setoid_rewrite <-Some_included_totalI. apply mcown_forall. Qed.
 
-  Lemma own_and γ a1 a2 :
-    own γ a1 ∧ own γ a2 ⊢ ∃ c, own γ c ∗ Some a1 ≼ Some c ∗ Some a2 ≼ Some c.
+  Lemma mcown_and μ γ a1 a2 :
+    mcown μ γ a1 ∧ mcown μ γ a2 ⊢ ∃ c, mcown μ γ c ∗ Some a1 ≼ Some c ∗ Some a2 ≼ Some c.
   Proof.
-    iIntros "Hown". iDestruct (own_forall γ (λ b, if b : bool then a1 else a2)
+    iIntros "Hown". iDestruct (mcown_forall μ γ (λ b, if b : bool then a1 else a2)
       with "[Hown]") as (c) "[$ Hincl]".
     { rewrite and_alt.
       iIntros ([]); [iApply ("Hown" $! true)|iApply ("Hown" $! false)]. }
     iSplit; [iApply ("Hincl" $! true)|iApply ("Hincl" $! false)].
   Qed.
-  Lemma own_and_total `{!CmraTotal A} γ a1 a2 :
-    own γ a1 ∧ own γ a2 ⊢ ∃ c, own γ c ∗ a1 ≼ c ∗ a2 ≼ c.
-  Proof. setoid_rewrite <-Some_included_totalI. apply own_and. Qed.
+  Lemma mcown_and_total `{!CmraTotal A} μ γ a1 a2 :
+    mcown μ γ a1 ∧ mcown μ γ a2 ⊢ ∃ c, mcown μ γ c ∗ a1 ≼ c ∗ a2 ≼ c.
+  Proof. setoid_rewrite <-Some_included_totalI. apply mcown_and. Qed.
 
   (** A version of [own_forall] for bounded quantification. Here [φ : B → Prop]
   is a pure predicate that restricts the elements of [B]. *)
-  Lemma own_forall_pred {B} γ (φ : B → Prop) (f : B → A) :
+  Lemma mcown_forall_pred {B} μ γ (φ : B → Prop) (f : B → A) :
     (∃ b, φ b) → (* [φ] is non-empty *)
-    (∀ b, ⌜ φ b ⌝ -∗ own γ (f b)) ⊢
-    ∃ c, own γ c ∗ (∀ b, ⌜ φ b ⌝ -∗ Some (f b) ≼ Some c).
+    (∀ b, ⌜ φ b ⌝ -∗ mcown μ γ (f b)) ⊢
+    ∃ c, mcown μ γ c ∗ (∀ b, ⌜ φ b ⌝ -∗ Some (f b) ≼ Some c).
   Proof.
     iIntros ([b0 pb0]) "Hown".
-    iAssert (∀ b : { b | φ b }, own γ (f (`b)))%I with "[Hown]" as "Hown".
+    iAssert (∀ b : { b | φ b }, mcown μ γ (f (`b)))%I with "[Hown]" as "Hown".
     { iIntros ([b pb]). by iApply ("Hown" $! b). }
-    iDestruct (@own_forall _ with "Hown") as (c) "[$ Hincl]".
+    iDestruct (@mcown_forall _ with "Hown") as (c) "[$ Hincl]".
     { split. apply (b0 ↾ pb0). }
     iIntros (b pb). iApply ("Hincl" $! (b ↾ pb)).
   Qed.
-  Lemma own_forall_pred_total `{!CmraTotal A} {B} γ (φ : B → Prop) (f : B → A) :
+  Lemma mcown_forall_pred_total `{!CmraTotal A} {B} μ γ (φ : B → Prop) (f : B → A) :
     (∃ b, φ b) →
-    (∀ b, ⌜ φ b ⌝ -∗ own γ (f b)) ⊢ ∃ c, own γ c ∗ (∀ b, ⌜ φ b ⌝ -∗ f b ≼ c).
-  Proof. setoid_rewrite <-Some_included_totalI. apply own_forall_pred. Qed.
+    (∀ b, ⌜ φ b ⌝ -∗ mcown μ γ (f b)) ⊢ ∃ c, mcown μ γ c ∗ (∀ b, ⌜ φ b ⌝ -∗ f b ≼ c).
+  Proof. setoid_rewrite <-Some_included_totalI. apply mcown_forall_pred. Qed.
 
-  Lemma own_and_discrete_total `{!CmraDiscrete A, !CmraTotal A} γ a1 a2 c :
+  Lemma mcown_and_discrete_total `{!CmraDiscrete A, !CmraTotal A} μ γ a1 a2 c :
     (∀ c', ✓ c' → a1 ≼ c' → a2 ≼ c' → c ≼ c') →
-    own γ a1 ∧ own γ a2 ⊢ own γ c.
+    mcown μ γ a1 ∧ mcown μ γ a2 ⊢ mcown μ γ c.
   Proof.
     iIntros (Hvalid) "Hown".
-    iDestruct (own_and_total with "Hown") as (c') "[Hown [%Ha1 %Ha2]]".
-    iDestruct (own_valid with "Hown") as %?.
-    iApply (own_mono with "Hown"); eauto.
+    iDestruct (mcown_and_total with "Hown") as (c') "[Hown [%Ha1 %Ha2]]".
+    iDestruct (mcown_valid with "Hown") as %?.
+    iApply (mcown_mono with "Hown"); eauto.
   Qed.
-  Lemma own_and_discrete_total_False `{!CmraDiscrete A, !CmraTotal A} γ a1 a2 :
+  Lemma own_and_discrete_total_False `{!CmraDiscrete A, !CmraTotal A} μ γ a1 a2 :
     (∀ c', ✓ c' → a1 ≼ c' → a2 ≼ c' → False) →
-    own γ a1 ∧ own γ a2 ⊢ False.
+    mcown μ γ a1 ∧ mcown μ γ a2 ⊢ False.
   Proof.
     iIntros (Hvalid) "Hown".
-    iDestruct (own_and_total with "Hown") as (c) "[Hown [%Ha1 %Ha2]]".
-    iDestruct (own_valid with "Hown") as %?; eauto.
+    iDestruct (mcown_and_total with "Hown") as (c) "[Hown [%Ha1 %Ha2]]".
+    iDestruct (mcown_valid with "Hown") as %?; eauto.
   Qed.
-End own_forall.
-  
+End mcown_forall.
