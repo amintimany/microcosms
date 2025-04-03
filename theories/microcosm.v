@@ -666,7 +666,7 @@ Proof.
     rewrite lookup_core Heqm' in Heqm; rewrite Heqm //.
 Qed.
     
-Global Instance mcrename_ne {Σ} μ μ' : NonExpansive (@rename_mc_iResUR Σ μ μ').
+Global Instance rename_mc_iResUR_ne {Σ} μ μ' : NonExpansive (@rename_mc_iResUR Σ μ μ').
 Proof.
   intros n x y Heq i γ.
   destruct (mcrename_keys μ μ' (x i) !! γ) as [m|] eqn:Heqm;
@@ -688,10 +688,10 @@ Proof.
     rewrite Heqm Hδ' in Heq; done.
 Qed.
 
-Global Instance mcrename_proper {Σ} μ μ' : Proper ((≡) ==> (≡)) (@rename_mc_iResUR Σ μ μ').
+Global Instance rename_mc_iResUR_proper {Σ} μ μ' : Proper ((≡) ==> (≡)) (@rename_mc_iResUR Σ μ μ').
 Proof. apply ne_proper; apply _. Qed.
 
-Global Instance remove_mc_ne {Σ} μ : NonExpansive (@remove_mc_iResUR Σ μ).
+Global Instance remove_mc_iResUR_ne {Σ} μ : NonExpansive (@remove_mc_iResUR Σ μ).
 Proof.
   intros n x y Heq i γ.
   destruct (remove_keys_in_mc μ (x i) !! γ) as [m|] eqn:Heqm;
@@ -708,7 +708,7 @@ Proof.
     apply Heq.
 Qed.
 
-Global Instance mcremove_proper {Σ} μ : Proper ((≡) ==> (≡)) (@remove_mc_iResUR Σ μ).
+Global Instance remove_mc_iResUR_proper {Σ} μ : Proper ((≡) ==> (≡)) (@remove_mc_iResUR Σ μ).
 Proof. apply ne_proper; apply _. Qed.
 
 Lemma rename_mc_iResUR_op {Σ} μ μ' (x x' : iResUR Σ) :
@@ -1028,10 +1028,26 @@ Section modalities.
   Implicit Types P Q : iProp Σ.
   Local Arguments uPred_holds {_} !_.
 
+  Global Instance rename_mc_ne μ ν : NonExpansive (@rename_mc Σ μ ν).
+  Proof.
+    intros; split; intros; simpl;
+    eapply uPred_in_dist; eauto using rename_mc_iResUR_validN.
+  Qed.
+  Global Instance rename_mc_proper μ ν : Proper ((≡) ==> (≡)) (@rename_mc Σ μ ν).
+  Proof. apply ne_proper, _. Qed.
+    
+  Global Instance remove_mc_ne μ : NonExpansive (@remove_mc Σ μ).
+  Proof.
+    intros; split; intros; simpl;
+    eapply uPred_in_dist; eauto using remove_mc_iResUR_validN.
+  Qed.
+  Global Instance remove_mc_proper μ : Proper ((≡) ==> (≡)) (@remove_mc Σ μ).
+  Proof. apply ne_proper, _. Qed.
+
   Lemma rename_mc_compose μ ν ρ P : rename_mc μ ν (rename_mc ν ρ P) ⊣⊢ rename_mc μ ρ P.
   Proof. split; intros; rewrite /rename_mc /= rename_mc_iResUR_comp //. Qed.
   
-  Lemma rename_mc_intros μ P : rename_mc μ μ P ⊢ P.
+  Lemma rename_mc_intro μ P : rename_mc μ μ P ⊢ P.
   Proof.
     split; rewrite /rename_mc /=; intros.
     eapply uPred_mono; eauto using rename_mc_iResUR_includedN.
@@ -1042,7 +1058,7 @@ Section modalities.
     split; rewrite /remove_mc /=; intros; rewrite remove_mc_iResUR_idemp //.
   Qed.
 
-  Lemma remove_mc_intros μ P : remove_mc μ P ⊢ P.
+  Lemma remove_mc_intro μ P : remove_mc μ P ⊢ P.
   Proof.
     split; rewrite /remove_mc /=; intros.
     eapply uPred_mono; eauto using remove_mc_iResUR_includedN.
@@ -1230,6 +1246,110 @@ Global Hint Mode OutsideMC + + ! : typeclass_instances.
 Global Instance: Params (@outside_mc) 4 := {}.
 Global Typeclasses Opaque outside_mc.
 
+Section inside_outside_rules_instances.
+  Context {Σ : gFunctors}.
+
+  Implicit Types P Q : iProp Σ.
+  Implicit Types μ ν ρ : mcname.
+
+  Global Instance rename_inside P μ ν : InsideMC μ (rename_mc μ ν P).
+  Proof. rewrite /InsideMC rename_mc_compose //. Qed.
+
+  Global Instance rename_outside P μ ν : μ ≠ ν → OutsideMC ν (rename_mc μ ν P).
+  Proof. intros; rewrite /OutsideMC remove_mc_rename_mc_just_rename //. Qed.
+
+  Global Instance remove_outside P μ : OutsideMC μ (remove_mc μ P).
+  Proof. rewrite /OutsideMC remove_mc_idemp //. Qed.
+
+  Lemma inside_mc_eq_rename μ P `{!InsideMC μ P} : P ⊣⊢ rename_mc μ μ P.
+  Proof. iSplit; first by iApply inside_mc. iApply rename_mc_intro. Qed.
+
+  Lemma inside_mc_eq_remove μ P `{!OutsideMC μ P} : P ⊣⊢ remove_mc μ P.
+  Proof. iSplit; first by iApply outside_mc. iApply remove_mc_intro. Qed.
+
+  Global Instance plain_inside `{!Plain P} μ : InsideMC μ P.
+  Proof. rewrite /InsideMC -(plain_plainly P) rename_mc_plainly //. Qed.
+  Global Instance plain_outside `{!Plain P} μ : OutsideMC μ P.
+  Proof. rewrite /OutsideMC -(plain_plainly P) remove_mc_plainly //. Qed.
+
+  Global Instance persistently_inside `{!InsideMC μ P} : InsideMC μ (<pers> P).
+  Proof.
+    rewrite /InsideMC rename_mc_persistently; apply persistently_mono; done.
+  Qed.
+  Global Instance persistently_outside `{!OutsideMC μ P} : OutsideMC μ (<pers> P).
+  Proof.
+    rewrite /OutsideMC remove_mc_persistently; apply persistently_mono; done.
+  Qed.
+
+  Global Instance except_0_inside `{!InsideMC μ P} : InsideMC μ (◇ P).
+  Proof.
+    rewrite /InsideMC rename_mc_except_0; apply except_0_mono; done.
+  Qed.
+  Global Instance except_0_outside `{!OutsideMC μ P} : OutsideMC μ (◇ P).
+  Proof.
+    rewrite /OutsideMC remove_mc_except_0; apply except_0_mono; done.
+  Qed.
+
+  Global Instance later_inside `{!InsideMC μ P} : InsideMC μ (▷ P).
+  Proof.
+    rewrite /InsideMC rename_mc_later; apply later_mono; done.
+  Qed.
+  Global Instance later_outside `{!OutsideMC μ P} : OutsideMC μ (▷ P).
+  Proof.
+    rewrite /OutsideMC remove_mc_later; apply later_mono; done.
+  Qed.
+
+  Global Instance sep_inside `{!InsideMC μ P, !InsideMC μ Q} : InsideMC μ (P ∗ Q).
+  Proof.
+    rewrite /InsideMC rename_mc_sep; apply sep_mono; done.
+  Qed.
+  Global Instance sep_outside `{!OutsideMC μ P, !OutsideMC μ Q} : OutsideMC μ (P ∗ Q).
+  Proof.
+    rewrite /OutsideMC remove_mc_sep; apply sep_mono; done.
+  Qed.
+
+  Global Instance and_inside `{!InsideMC μ P, !InsideMC μ Q} : InsideMC μ (P ∧ Q).
+  Proof.
+    rewrite /InsideMC rename_mc_and; apply and_mono; done.
+  Qed.
+  Global Instance and_outside `{!OutsideMC μ P, !OutsideMC μ Q} : OutsideMC μ (P ∧ Q).
+  Proof.
+    rewrite /OutsideMC remove_mc_and; apply and_mono; done.
+  Qed.
+
+  Global Instance or_inside `{!InsideMC μ P, !InsideMC μ Q} : InsideMC μ (P ∨ Q).
+  Proof.
+    rewrite /InsideMC rename_mc_or; apply or_mono; done.
+  Qed.
+  Global Instance or_outside `{!OutsideMC μ P, !OutsideMC μ Q} : OutsideMC μ (P ∨ Q).
+  Proof.
+    rewrite /OutsideMC remove_mc_or; apply or_mono; done.
+  Qed.
+
+  Global Instance forall_inside {A} (Φ : A → iProp Σ)
+    `{!∀ x : A, InsideMC μ (Φ x)} : InsideMC μ (∀ x, Φ x).
+  Proof.
+    rewrite /InsideMC rename_mc_forall; apply forall_mono; done.
+  Qed.
+  Global Instance forall_outside {A} (Φ : A → iProp Σ)
+    `{!∀ x : A, OutsideMC μ (Φ x)} : OutsideMC μ (∀ x, Φ x).
+  Proof.
+    rewrite /OutsideMC remove_mc_forall; apply forall_mono; done.
+  Qed.
+
+  Global Instance exist_inside {A} (Φ : A → iProp Σ)
+    `{!∀ x : A, InsideMC μ (Φ x)} : InsideMC μ (∃ x, Φ x).
+  Proof.
+    rewrite /InsideMC rename_mc_exist; apply exist_mono; done.
+  Qed.
+  Global Instance exist_outside {A} (Φ : A → iProp Σ)
+    `{!∀ x : A, OutsideMC μ (Φ x)} : OutsideMC μ (∃ x, Φ x).
+  Proof.
+    rewrite /OutsideMC remove_mc_exist; apply exist_mono; done.
+  Qed.
+
+End inside_outside_rules_instances.
+
 (* creating a new microcosm *)
 
 Lemma rename_mc_iResUR_in_fresh_mcname {Σ} μ ν n (x y : iResUR Σ) :
@@ -1262,9 +1382,10 @@ Qed.
 Section new_microcosm.
   Local Arguments uPred_holds {_} !_.
 
-  Lemma new_microcosm {Σ} (P : iProp Σ) μ :
-  rename_mc μ μ P ⊢ ■ ∀ (M : gset mcname), |==> ∃ ν, ⌜ν ∉ M⌝ ∗ rename_mc ν μ P.
+  Lemma new_microcosm {Σ} (P : iProp Σ) μ `{!InsideMC μ P} :
+  P ⊢ ■ ∀ (M : gset mcname), |==> ∃ ν, ⌜ν ∉ M⌝ ∗ rename_mc ν μ P.
   Proof.
+    rewrite {1}(inside_mc_eq_rename μ P).
     rewrite /rename_mc; unseal.
     split; intros n x Hvl HP M k f Hkn Hvl'; simpl in *.
     rewrite left_id in Hvl'.
@@ -1276,7 +1397,7 @@ Section new_microcosm.
     eexists (fresh_mcname f M), ε, _; split; first by rewrite left_id.
     split; first set_solver.
     rewrite rename_mc_iResUR_comp.
-    eapply uPred_holds_ne; eauto.
+    eapply uPred_holds_ne; [done|done| |by eauto].
     eapply rename_mc_iResUR_validN, cmra_validN_le; eauto.
   Qed.
 End new_microcosm.
