@@ -285,7 +285,7 @@ Proof.
   apply mcnames_of_mono.
   rewrite /mcnames_of_iResUR.
   pose proof (elem_of_enum i) as
-    (l&l'&->)%(elem_of_list_fmap_1 (λ i, dom (x i)))%elem_of_list_split.
+    (l&l'&->)%(list_elem_of_fmap_2 (λ i, dom (x i)))%list_elem_of_split.
   replace (foldr union ∅ (l ++ dom (x i) :: l')) with
     (foldr union ∅ (dom (x i) :: l ++ l')); first set_solver.
   apply (foldr_permutation (=) union).
@@ -311,7 +311,7 @@ Proof.
   rewrite -elem_of_list_to_map; last first.
   { apply NoDup_fmap_fst.
     - intros ???.
-      rewrite !elem_of_list_omap.
+      rewrite !list_elem_of_omap.
       intros ([γ b]& Hγ &?) ([γ' b']& Hγ' &?); simpl in *.
       destruct (mcrename μ μ' γ) as [ξ|] eqn:Heqξ; last done.
       apply mcrename_spec in Heqξ as [? (?&?&?)]; simplify_eq.
@@ -340,7 +340,7 @@ Proof.
       assert (γ = γ'); subst.
       { eapply push_pop_mcname_ext; eauto. }
       done. }
-  rewrite elem_of_list_omap.
+  rewrite list_elem_of_omap.
   split.
   - intros ([γ b]& Hγ &?); simpl in *.
     destruct (mcrename μ μ' γ) as [ξ|] eqn:Heqξ; last done.
@@ -357,7 +357,7 @@ Lemma not_in_mcrename_keys {A} μ μ' (g : gmap gname A) δ :
 Proof.
   rewrite /mcrename_keys; split.
   - intros Hδ%not_elem_of_list_to_map_2 γ.
-    rewrite list_fmap_omap elem_of_list_omap in Hδ.
+    rewrite list_fmap_omap list_elem_of_omap in Hδ.
     destruct (decide (mcrename μ μ' γ = Some δ)) as [Hγδ|]; last by left.
     destruct (g !! γ) eqn:Hgγ; last by right.
     exfalso; apply Hδ.
@@ -369,7 +369,7 @@ Proof.
     |- ?A = _ => destruct A as [a|] eqn:Ha; last done
     end.
     apply elem_of_list_to_map_2 in Ha.
-    rewrite elem_of_list_omap in Ha.
+    rewrite list_elem_of_omap in Ha.
     destruct Ha as ([γ a'] & Hγa'%elem_of_map_to_list & Hδa'); simpl in *.
     specialize (Hn γ).
     destruct (mcrename μ μ' γ); last done.
@@ -391,7 +391,7 @@ Proof.
   rewrite -elem_of_list_to_map; last first.
   { apply NoDup_fmap_fst.
     - intros ???.
-      rewrite !elem_of_list_omap.
+      rewrite !list_elem_of_omap.
       intros ([δ b]& Hδ & Hδlu) ([δ' b']& Hδ' & Hδ'lu); simpl in *.
       rewrite -decide_bool_decide in Hδlu; destruct decide; first done.
       simplify_eq.
@@ -407,7 +407,7 @@ Proof.
       simplify_eq.
       rewrite -decide_bool_decide in Hlu'; destruct decide; first done.
       simplify_eq; done. }
-  rewrite elem_of_list_omap.
+  rewrite list_elem_of_omap.
   split.
   - intros ([δ b]& Hδ & Hlu); simpl in *.
     rewrite -decide_bool_decide in Hlu; destruct decide; first done.
@@ -424,7 +424,7 @@ Lemma not_in_remove_keys_in_mc {A} μ (g : gmap gname A) γ :
 Proof.
   rewrite /remove_keys_in_mc; split.
   - intros Hδ%not_elem_of_list_to_map_2.
-    rewrite list_fmap_omap elem_of_list_omap in Hδ.
+    rewrite list_fmap_omap list_elem_of_omap in Hδ.
     destruct (decide (mcname_of γ = Some μ)) as [Hγμ|]; first by left.
     destruct (g !! γ) eqn:Hgγ; last by right.
     exfalso; apply Hδ.
@@ -436,7 +436,7 @@ Proof.
     |- ?A = _ => destruct A as [a|] eqn:Ha; last done
     end.
     apply elem_of_list_to_map_2 in Ha.
-    rewrite elem_of_list_omap in Ha.
+    rewrite list_elem_of_omap in Ha.
     destruct Ha as ([δ a'] & Hδa'%elem_of_map_to_list & Hδγ'); simpl in *.
     rewrite -decide_bool_decide in Hδγ'; destruct decide; first done.
     simplify_eq.
@@ -1422,7 +1422,7 @@ Proof.
     specialize (Hincl (inG_id i) γ).
     rewrite discrete_fun_lookup_op lookup_op in Hincl.
     rewrite /own.iRes_singleton discrete_fun_lookup_singleton /= in Hincl.
-    rewrite lookup_singleton in Hincl.
+    rewrite lookup_singleton_eq in Hincl.
     destruct (z (inG_id i) !! γ) eqn:Hzlu.
     + rewrite Hzlu -Some_op in Hincl.
       eexists _; split; first done.
@@ -1436,8 +1436,8 @@ Proof.
       rewrite discrete_fun_lookup_op lookup_op.
       destruct (decide ((inG_id i) = j)) as [<-|].
       * destruct (decide (γ = δ)) as [<-|].
-        -- rewrite discrete_fun_lookup_insert lookup_insert.
-           rewrite /own.iRes_singleton discrete_fun_lookup_singleton lookup_insert.
+        -- rewrite discrete_fun_lookup_insert lookup_insert_eq.
+           rewrite /own.iRes_singleton discrete_fun_lookup_singleton lookup_insert_eq.
            rewrite -Some_op Hx Hc //.
         -- rewrite discrete_fun_lookup_insert lookup_insert_ne; last done.
            rewrite /own.iRes_singleton discrete_fun_lookup_singleton lookup_insert_ne; last done.
@@ -1450,8 +1450,8 @@ Proof.
       rewrite discrete_fun_lookup_op lookup_op.
       destruct (decide ((inG_id i) = j)) as [<-|].
       * destruct (decide (γ = δ)) as [<-|].
-        -- rewrite discrete_fun_lookup_insert lookup_delete right_id.
-           rewrite /own.iRes_singleton discrete_fun_lookup_singleton lookup_insert.
+        -- rewrite discrete_fun_lookup_insert lookup_delete_eq right_id.
+           rewrite /own.iRes_singleton discrete_fun_lookup_singleton lookup_insert_eq.
            rewrite Hx Hc //.
         -- rewrite discrete_fun_lookup_insert lookup_delete_ne; last done.
           rewrite /own.iRes_singleton discrete_fun_lookup_singleton lookup_insert_ne; last done.

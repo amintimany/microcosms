@@ -17,11 +17,11 @@ Proof.
   rewrite Hmod Nat.add_0_r in Hrml.
   pose proof (Nat.div_mod n k) as Hrm.
   assert (n `mod` k = 0) as Hrm0.
-  { rewrite {2}Hrml in Hrm; first lia.
+  { rewrite {2}Hrml in Hrm; last lia.
     replace (l * k * n `div` (l * k)) with ((l * n `div` (l * k)) * k) in Hrm by lia.
     rewrite Nat.div_mul in Hrm; lia. }
   rewrite Hrm0 Nat.add_0_r in Hrm.
-  rewrite {1}Hrml in Hrm; first lia.
+  rewrite {1}Hrml in Hrm; last lia.
   assert (k * (l * n `div` (l * k)) = k * n `div` k) as Hrm' by lia.
   rewrite Nat.mul_cancel_l in Hrm'; lia.
 Qed.
@@ -33,8 +33,7 @@ Proof.
   rewrite Hmod Nat.add_0_r in Hrs.
   pose proof (Nat.div_mod a b) as Hrs'.
   rewrite -Nat.mul_assoc (Nat.mul_comm b c) in Hrs.
-  rewrite div_in_div in Hrs; [lia|lia|rewrite -(Nat.mul_comm b c); done|].
-  lia.
+  rewrite div_in_div in Hrs; solve [lia||rewrite -(Nat.mul_comm b c); done].
 Qed.
 
 Fixpoint log_aux (n : nat) (k : nat) (Hk : k > 1) (wf : Acc lt n) : nat :=
@@ -96,7 +95,7 @@ Proof.
   pose proof (Nat.div_mod (S n) k) as Hrm.
   rewrite Heq in Hrm.
   rewrite Nat.add_0_r in Hrm.
-  rewrite {1 3}Hrm; first lia.
+  rewrite {1 3}Hrm; last lia.
   assert (k ^ log (S n `div` k) k Hk > 0).
   { pose proof (Nat.pow_nonzero k (log (S n `div` k) k Hk)). lia. }
   rewrite !Nat.Div0.mul_mod_distr_l.
@@ -274,7 +273,7 @@ Definition project_positive_pair (k : positive) : option (positive * positive) :
 Lemma project_inject_positive_pair p q : project_positive_pair (inject_positive_pair p q) = Some (p, q).
 Proof.
   rewrite /inject_positive_pair /project_positive_pair.
-  rewrite Nat2Pos.id.
+  rewrite Nat2Pos.id; last first.
   { pose proof (inject_nat_pair_positive (Pos.to_nat p - 1) (Pos.to_nat q - 1)); lia. }
   rewrite project_inject_nat_pair /=.
   replace (Pos.to_nat p - 1 + 1) with (Pos.to_nat p) by lia.

@@ -1,5 +1,5 @@
-From stdpp Require Export options prelude numbers.
-From Stdlib.ssr Require Export ssreflect.
+From stdpp Require Export options prelude ssreflect.
+From iris.prelude Require Export options prelude.
 
 (* Some helper lemmas; consider up-streaming some of them. *)
 
@@ -15,7 +15,7 @@ Proof.
   constructor; last first.
   { apply IHl. by inversion Hl. }
   intros Hbl.
-  apply elem_of_list_omap in Hbl as (a' & Ha' & Hb').
+  apply list_elem_of_omap in Hbl as (a' & Ha' & Hb').
   assert (a = a'); subst.
   { eapply Hf; eauto. }
   inversion Hl; done.
